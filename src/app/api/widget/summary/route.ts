@@ -37,21 +37,18 @@ export async function POST(req: NextRequest) {
     // Generar resumen con el modelo
     const { text: summary } = await generateText({
       model: openrouter(MODELS.fast),
-      system: `Eres un analista de ventas. Genera un resumen CONCISO en español del interés del visitante basándote en la conversación.
+      system: `Genera un resumen breve en español para el visitante sobre los temas que exploró en esta consulta.
 
-Incluye exactamente estas secciones:
-1. **Servicios consultados**: Lista los servicios o temas que preguntó
-2. **Dudas principales**: Las 2-3 preguntas más relevantes
-3. **Nivel de interés**: Bajo / Medio / Alto — con breve justificación
-4. **Próximo paso sugerido**: Qué acción recomiendas (cita, propuesta, info adicional)
-
-REGLAS IMPORTANTES:
-- NO incluyas datos de contacto (email, teléfono, nombre completo)
-- NO menciones nombres de clientes ni empresas específicas
-- Máximo 200 palabras
-- Tono profesional y directo`,
+El resumen debe:
+- Estar redactado en segunda persona ("Exploraste...", "Consultaste...", "Mostraste interés en...")
+- Mencionar los servicios o temas que preguntó, de forma clara y amable
+- Incluir una sugerencia de siguiente paso (agendar una llamada, solicitar propuesta, etc.)
+- Ser máximo 3 párrafos cortos
+- NO usar markdown (sin #, **, -, ni símbolos de formato)
+- NO incluir análisis internos, niveles de interés ni datos de contacto
+- Tono cálido y profesional, orientado al visitante`,
       messages: [
-        { role: 'user', content: `Conversación a analizar:\n\n${conversation}` },
+        { role: 'user', content: `Conversación a resumir:\n\n${conversation}` },
       ],
     })
 

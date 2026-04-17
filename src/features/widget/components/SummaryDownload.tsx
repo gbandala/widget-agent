@@ -47,11 +47,14 @@ export function SummaryDownload({ sessionId, token, botName = 'Asistente' }: Sum
         year: 'numeric', month: 'long', day: 'numeric',
       })
 
-      const keyMessages = (messages as Message[])
-        .filter(m => m.role === 'user')
-        .slice(0, 10)
-        .map(m => `<li>${escapeHtml(m.content)}</li>`)
-        .join('')
+      const cleanSummary = summary
+        ? summary
+            .replace(/#{1,6}\s*/g, '')       // quitar # ## ###
+            .replace(/\*\*(.*?)\*\*/g, '$1') // quitar **negrita**
+            .replace(/\*(.*?)\*/g, '$1')     // quitar *cursiva*
+            .replace(/^\s*[-*]\s+/gm, '• ')  // convertir listas a bullets simples
+            .trim()
+        : ''
 
       const html = `<!DOCTYPE html>
 <html lang="es">
@@ -59,33 +62,23 @@ export function SummaryDownload({ sessionId, token, botName = 'Asistente' }: Sum
   <meta charset="UTF-8">
   <title>Resumen de Consulta — ${date}</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 700px; margin: 40px auto; color: #1a1a1a; line-height: 1.6; }
-    h1 { color: #2563eb; font-size: 1.5rem; margin-bottom: 4px; }
-    .meta { color: #6b7280; font-size: 0.875rem; margin-bottom: 24px; }
-    h2 { font-size: 1rem; color: #374151; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-top: 24px; }
-    .summary { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 16px; margin: 16px 0; white-space: pre-wrap; }
-    ul { padding-left: 20px; }
-    li { margin: 6px 0; }
-    .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 0.75rem; color: #9ca3af; }
-    @media print { body { margin: 20px; } }
+    body { font-family: system-ui, sans-serif; max-width: 680px; margin: 48px auto; color: #1a1a1a; line-height: 1.7; }
+    h1 { color: #2563eb; font-size: 1.4rem; margin-bottom: 4px; }
+    .meta { color: #6b7280; font-size: 0.85rem; margin-bottom: 32px; }
+    .content { font-size: 0.95rem; color: #374151; white-space: pre-wrap; }
+    .footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 0.75rem; color: #9ca3af; }
+    @media print { body { margin: 24px; } }
   </style>
 </head>
 <body>
-  <h1>Resumen de Consulta</h1>
-  <p class="meta">Generado el ${date} · Asistente: ${escapeHtml(botName)}</p>
+  <h1>Resumen de tu Consulta</h1>
+  <p class="meta">Generado el ${date} · ${escapeHtml(botName)}</p>
 
-  ${summary ? `
-  <h2>Resumen de Interés</h2>
-  <div class="summary">${escapeHtml(summary)}</div>
-  ` : ''}
-
-  <h2>Tus Preguntas Principales</h2>
-  <ul>${keyMessages || '<li>Sin preguntas registradas</li>'}</ul>
+  ${cleanSummary ? `<div class="content">${escapeHtml(cleanSummary)}</div>` : '<p style="color:#6b7280">No se generó resumen para esta sesión.</p>'}
 
   <div class="footer">
     Este documento es un resumen de tu consulta con nuestro asistente virtual.
     Para más información, contáctanos directamente.
-    Tus datos personales son tratados conforme a nuestro aviso de privacidad.
   </div>
 </body>
 </html>`
