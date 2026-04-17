@@ -1,0 +1,185 @@
+#!/usr/bin/env tsx
+/**
+ * Widget Agent — Setup CLI
+ * Uso: npx tsx scripts/setup.ts
+ *
+ * Pasos:
+ * 1. Valida variables de entorno
+ * 2. Crea las tablas en Supabase (aplica migración 001)
+ * 3. Genera el primer widget_token
+ * 4. Carga KB inicial desde /supabase/seed/kb.json si existe
+ * 5. Muestra resumen de configuración
+ */
+
+import { createClient } from '@supabase/supabase-js'
+import * as fs from 'fs'
+import * as path from 'path'
+import * as readline from 'readline'
+
+// ---- Helpers ----
+function ask(rl: readline.Interface, question: string): Promise<string> {
+  return new Promise(resolve => rl.question(question, resolve))
+}
+
+function log(msg: string) { console.log(`\n✓ ${msg}`) }
+function warn(msg: string) { console.log(`\n⚠  ${msg}`) }
+function error(msg: string) { console.error(`\n✗ ${msg}`) }
+
+// ---- Main ----
+async function main() {
+  console.log('\n════════════════════════════════════════')
+  console.log('     Widget Agent — Setup Inicial')
+  console.log('════════════════════════════════════════')
+
+  // 1. Validar env
+  const required = [
+    'NEXT_PUBLIC_SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'OPENROUTER_API_KEY',
+  ]
+
+  // Cargar .env.local si existe
+  const envPath = path.join(process.cwd(), '.env.local')
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf-8')
+    for (const line of envContent.split('\n')) {
+      const [key, ...rest] = line.split('=')
+      if (key && rest.length > 0 && !process.env[key.trim()]) {
+        process.env[key.trim()] = rest.join('=').trim()
+      }
+    }
+    log('.env.local cargado')
+  } else {
+    warn('No se encontró .env.local — asegúrate de crearlo desde .env.example')
+  }
+
+  const missing = required.filter(k => !process.env[k])
+  if (missing.length > 0) {
+    error(`Variables de entorno faltantes: ${missing.join(', ')}`)
+    error('Crea .env.local con esas variables y vuelve a ejecutar setup.ts')
+    process.exit(1)
+  }
+  log('Variables de entorno validadas')
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  // 2. Aplicar migración SQL
+  const migrationPath = path.join(process.cwd(), 'supabase/migrations/001_initial_schema.sql')
+  if (fs.existsSync(migrationPath)) {
+    const sql = fs.readFileSync(migrationPath, 'utf-8')
+    // Ejecutar en bloques separados por ';'
+    const statements = sql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0 && !s.startsWith('--'))
+
+    let successCount = 0
+    for (const statement of statements) {
+      try {
+        const { error: sqlError } = await supabase.rpc('exec_sql', { sql: statement + ';' })
+        if (sqlError && !sqlError.message.includes('already exists')) {
+          warn(`SQL warning: ${sqlError.message}`)
+        } else {
+          successCount++
+        }
+      } catch {
+        // Tabla ya existe o extensión ya activada — continuar
+      }
+    }
+    log(`Migración aplicada (${successCount} statements procesados)`)
+  } else {
+    warn('Migración SQL no encontrada. Aplica manualmente: supabase/migrations/001_initial_schema.sql')
+  }
+
+  // 3. Configurar bot y generar token
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+
+  console.log('\n──── Configuración del Widget ────')
+  const botName = (await ask(rl, 'Nombre del bot (ej: "Sofia"): ')).trim() || 'Asistente'
+  const botAvatarUrl = (await ask(rl, 'URL del avatar del bot (Enter para omitir): ')).trim() || null
+  const label = (await ask(rl, 'Etiqueta para este token (ej: "Landing principal"): ')).trim() || 'Landing principal'
+  const allowedOrigin = (await ask(rl, 'URL de la landing autorizada (ej: https://miempresa.com): ')).trim()
+
+  rl.close()
+
+  if (!allowedOrigin) {
+    error('Debes ingresar la URL de la landing autorizada')
+    process.exit(1)
+  }
+
+  // Insertar token en DB
+  const { data: tokenData, error: tokenError } = await supabase
+    .from('widget_tokens')
+    .insert({
+      label,
+      allowed_origin: allowedOrigin,
+      bot_name: botName,
+      bot_avatar_url: botAvatarUrl,
+      is_active: true,
+    })
+    .select()
+    .single()
+
+  if (tokenError) {
+    error(`Error creando token: ${tokenError.message}`)
+    process.exit(1)
+  }
+  log(`Token creado para "${label}" → ${allowedOrigin}`)
+
+  // 4. Cargar KB seed si existe
+  const seedPath = path.join(process.cwd(), 'supabase/seed/kb.json')
+  if (fs.existsSync(seedPath)) {
+    const entries = JSON.parse(fs.readFileSync(seedPath, 'utf-8'))
+    const { error: kbError } = await supabase.from('kb_entries').insert(entries)
+    if (kbError) {
+      warn(`KB seed parcialmente cargado: ${kbError.message}`)
+    } else {
+      log(`KB seed cargado: ${entries.length} entradas`)
+    }
+  } else {
+    warn('No se encontró supabase/seed/kb.json — puedes cargar la KB desde el panel admin')
+    // Crear template vacío
+    const templatePath = path.join(process.cwd(), 'supabase/seed/kb.example.json')
+    if (!fs.existsSync(templatePath)) {
+      fs.writeFileSync(templatePath, JSON.stringify([
+        {
+          title: "Ejemplo: Servicio de Desarrollo Web",
+          content: "Desarrollamos aplicaciones web modernas con React, Next.js y TypeScript. Nos especializamos en aplicaciones SaaS, dashboards y plataformas con integraciones de IA.",
+          category: "service",
+          tags: ["web", "react", "nextjs", "saas"]
+        },
+        {
+          title: "Ejemplo: Capacidad de Equipo",
+          content: "Nuestro equipo cuenta con experiencia en arquitectura de microservicios, integración con APIs de terceros, autenticación con OAuth2/Supabase y despliegue en Vercel/AWS.",
+          category: "capability",
+          tags: ["equipo", "backend", "cloud"]
+        }
+      ], null, 2))
+      log('Template de KB creado en supabase/seed/kb.example.json')
+    }
+  }
+
+  // 5. Resumen
+  console.log('\n════════════════════════════════════════')
+  console.log('     Setup Completado ✓')
+  console.log('════════════════════════════════════════')
+  console.log(`\n  Bot Name:      ${botName}`)
+  console.log(`  Token ID:      ${tokenData.id}`)
+  console.log(`  Widget Token:  ${tokenData.token}`)
+  console.log(`  Origin:        ${allowedOrigin}`)
+  console.log('\n  Agrega esto a tu landing:')
+  console.log(`\n  <script>`)
+  console.log(`    window.WIDGET_TOKEN = "${tokenData.token}";`)
+  console.log(`  </script>`)
+  console.log(`  <script src="${allowedOrigin || 'http://localhost:3000'}/widget.js" defer></script>`)
+  console.log('\n  Panel Admin:   http://localhost:3000/admin')
+  console.log('\n════════════════════════════════════════\n')
+}
+
+main().catch(e => {
+  error(String(e))
+  process.exit(1)
+})

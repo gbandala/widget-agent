@@ -1,0 +1,76 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createServiceClient } from '@/lib/supabase/server'
+
+export interface TokenValidation {
+  valid: boolean
+  tokenId?: string
+  botName?: string
+  botAvatarUrl?: string | null
+  reason?: string
+}
+
+/**
+ * Valida el widget token contra la base de datos.
+ * Verifica: existencia, is_active, allowed_origin.
+ */
+export async function validateWidgetToken(
+  token: string,
+  origin: string
+): Promise<TokenValidation> {
+  if (!token || !origin) {
+    return { valid: false, reason: 'missing_token_or_origin' }
+  }
+
+  try {
+    const supabase = await createServiceClient()
+    const { data, error } = await supabase
+      .from('widget_tokens')
+      .select('id, is_active, allowed_origin, bot_name, bot_avatar_url')
+      .eq('token', token)
+      .single()
+
+    if (error || !data) {
+      return { valid: false, reason: 'token_not_found' }
+    }
+
+    if (!data.is_active) {
+      return { valid: false, reason: 'token_inactive' }
+    }
+
+    // Verificar origen (acepta wildcard '*' para desarrollo)
+    const normalizedOrigin = origin.replace(/\/$/, '')
+    const normalizedAllowed = data.allowed_origin.replace(/\/$/, '')
+
+    if (normalizedAllowed !== '*' && normalizedAllowed !== normalizedOrigin) {
+      return { valid: false, reason: 'origin_mismatch' }
+    }
+
+    return {
+      valid: true,
+      tokenId: data.id,
+      botName: data.bot_name ?? 'Asistente',
+      botAvatarUrl: data.bot_avatar_url,
+    }
+  } catch {
+    return { valid: false, reason: 'validation_error' }
+  }
+}
+
+/**
+ * Middleware helper: validates the widget token from the request and returns
+ * either the token data or a ready-to-return 401 NextResponse.
+ */
+export async function requireWidgetToken(
+  req: NextRequest
+): Promise<{ ok: true; tokenId: string } | { ok: false; response: NextResponse }> {
+  const token = req.headers.get('authorization')?.replace('Bearer ', '') ?? ''
+  const origin = req.headers.get('origin') ?? ''
+  const result = await validateWidgetToken(token, origin)
+  if (!result.valid || !result.tokenId) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    }
+  }
+  return { ok: true, tokenId: result.tokenId }
+}

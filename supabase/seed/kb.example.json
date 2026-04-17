@@ -1,0 +1,44 @@
+[
+  {
+    "title": "Servicio: Desarrollo de Aplicaciones Web",
+    "content": "Desarrollamos aplicaciones web modernas con React, Next.js y TypeScript. Nos especializamos en aplicaciones SaaS, dashboards analíticos y plataformas con integración de IA. Cada proyecto incluye diseño responsive, autenticación segura y despliegue en la nube.",
+    "category": "service",
+    "tags": ["web", "react", "nextjs", "saas", "dashboard"]
+  },
+  {
+    "title": "Servicio: Integración de Inteligencia Artificial",
+    "content": "Integramos modelos de lenguaje (LLMs) en aplicaciones existentes o nuevas. Casos típicos: chatbots de atención, análisis de documentos, generación de contenido, procesamiento de datos no estructurados, RAG sobre bases de conocimiento propias.",
+    "category": "service",
+    "tags": ["ia", "llm", "chatbot", "rag", "openrouter"]
+  },
+  {
+    "title": "Capacidad: Equipo de Desarrollo",
+    "content": "Equipo con experiencia en arquitectura de microservicios, APIs REST y GraphQL, autenticación OAuth2/JWT/Supabase, bases de datos PostgreSQL y NoSQL, despliegue en Vercel, AWS y GCP. Metodología ágil con entregas iterativas cada 2 semanas.",
+    "category": "capability",
+    "tags": ["equipo", "backend", "cloud", "agil"]
+  },
+  {
+    "title": "Caso de Uso: Plataforma de Gestión de Proyectos con IA",
+    "content": "Desarrollamos una plataforma para una empresa de construcción que automatiza la generación de reportes de avance usando IA, extrae datos de fotos del sitio y genera alertas predictivas de retrasos. La plataforma integra calendario, gestión de tareas y dashboard en tiempo real.",
+    "category": "project_case",
+    "tags": ["gestion", "construccion", "ia", "reportes", "automatizacion"]
+  },
+  {
+    "title": "FAQ: ¿Cuánto tiempo toma un proyecto típico?",
+    "content": "Depende del alcance. Un MVP funcional generalmente toma entre 4 y 8 semanas. Proyectos más complejos con integraciones avanzadas pueden tomar de 3 a 6 meses. Trabajamos con entregas incrementales para que puedas ver avances desde la primera semana.",
+    "category": "faq",
+    "tags": ["tiempo", "mvp", "proceso", "entregas"]
+  },
+  {
+    "title": "FAQ: ¿Cómo es el proceso de trabajo?",
+    "content": "1. Sesión de descubrimiento gratuita (30 min) para entender tu necesidad. 2. Propuesta técnica y comercial en 3 días hábiles. 3. Sprint de definición (1 semana) para alinear arquitectura y diseño. 4. Desarrollo iterativo con demos cada 2 semanas. 5. Entrega, documentación y soporte post-lanzamiento.",
+    "category": "faq",
+    "tags": ["proceso", "metodologia", "sprints", "descubrimiento"]
+  },
+  {
+    "title": "Precios: Modalidades de Contratación",
+    "content": "Ofrecemos tres modalidades: (1) Proyecto cerrado: precio fijo por alcance definido. (2) Time & Materials: facturación por hora/semana, ideal para proyectos exploratorios. (3) Retainer mensual: capacidad dedicada para empresas con necesidades continuas. Contáctanos para una estimación basada en tu caso específico.",
+    "category": "pricing",
+    "tags": ["precios", "contratacion", "retainer", "proyecto"]
+  }
+]
