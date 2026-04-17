@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 interface SummaryDownloadProps {
   sessionId: string
+  token: string
   botName?: string
 }
 
@@ -13,7 +14,7 @@ interface Message {
   created_at: string
 }
 
-export function SummaryDownload({ sessionId, botName = 'Asistente' }: SummaryDownloadProps) {
+export function SummaryDownload({ sessionId, token, botName = 'Asistente' }: SummaryDownloadProps) {
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
 
@@ -24,13 +25,18 @@ export function SummaryDownload({ sessionId, botName = 'Asistente' }: SummaryDow
       setGenerating(true)
       await fetch('/api/widget/summary', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({ sessionId }),
       })
       setGenerating(false)
 
       // 2. Obtener resumen y mensajes
-      const res = await fetch(`/api/widget/summary?sessionId=${sessionId}`)
+      const res = await fetch(`/api/widget/summary?sessionId=${sessionId}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
       const { summary, messages } = await res.json() as {
         summary: string | null
         messages: Message[]

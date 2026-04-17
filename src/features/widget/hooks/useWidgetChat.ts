@@ -38,7 +38,10 @@ export function useWidgetChat({ token, anonId, sourceUrl }: UseWidgetChatOptions
 
         const sessionRes = await fetch('/api/widget/session', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
           body: JSON.stringify({ anonId, tokenId: tid, sourceUrl }),
         })
         if (!sessionRes.ok) return

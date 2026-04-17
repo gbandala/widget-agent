@@ -102,7 +102,10 @@ export function WidgetLauncher({
     if (!pendingCaptureContact) return
     const res = await fetch('/api/widget/leads', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
       body: JSON.stringify({ ...data, sessionId }),
     })
     if (!res.ok) throw new Error('Error guardando lead')
@@ -244,7 +247,7 @@ export function WidgetLauncher({
           {/* Summary download (shown once there are enough messages) */}
           {sessionId && hasEnoughMessages && (
             <div className="px-3 pt-2 flex-shrink-0">
-              <SummaryDownload sessionId={sessionId} botName={botName} />
+              <SummaryDownload sessionId={sessionId} token={token} botName={botName} />
             </div>
           )}
 
