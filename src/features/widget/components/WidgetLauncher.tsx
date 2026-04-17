@@ -266,7 +266,7 @@ export function WidgetLauncher({
                 onChange={e => setInput(e.target.value)}
                 placeholder="Escribe tu pregunta..."
                 disabled={isLoading || !sessionReady}
-                className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-gray-900 placeholder:text-gray-400"
               />
               <button
                 type="submit"

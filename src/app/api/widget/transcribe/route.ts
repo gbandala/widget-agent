@@ -13,8 +13,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Archivo de audio requerido' }, { status: 400 })
     }
 
-    // Validar tipo MIME
-    if (!ALLOWED_AUDIO_TYPES.includes(file.type)) {
+    // Validar tipo MIME (browser puede añadir codecs: audio/webm;codecs=opus)
+    if (!ALLOWED_AUDIO_TYPES.some(t => file.type.startsWith(t))) {
       return NextResponse.json(
         { error: 'Formato de audio no soportado. Usa webm, mp4, ogg, wav o mp3.' },
         { status: 400 }
