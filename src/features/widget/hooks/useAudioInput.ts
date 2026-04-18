@@ -1,89 +1,79 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
-type AudioState = 'idle' | 'recording' | 'processing' | 'error'
+type AudioState = 'idle' | 'recording' | 'error'
 
 interface UseAudioInputOptions {
   onTranscription: (text: string) => void
   onError?: (message: string) => void
 }
 
+// Extend Window type for cross-browser SpeechRecognition
+declare global {
+  interface Window {
+    SpeechRecognition: typeof SpeechRecognition
+    webkitSpeechRecognition: typeof SpeechRecognition
+  }
+}
+
 export function useAudioInput({ onTranscription, onError }: UseAudioInputOptions) {
   const [state, setState] = useState<AudioState>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<Blob[]>([])
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
 
-  const startRecording = useCallback(async () => {
-    setErrorMessage(null)
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4',
-      })
-      mediaRecorderRef.current = mediaRecorder
-      chunksRef.current = []
+  const isSupported = typeof window !== 'undefined' &&
+    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
 
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data)
-      }
+  const stopRecording = useCallback(() => {
+    recognitionRef.current?.stop()
+  }, [])
 
-      mediaRecorder.onstop = async () => {
-        // Detener tracks del micrófono
-        stream.getTracks().forEach(t => t.stop())
-
-        setState('processing')
-        try {
-          const blob = new Blob(chunksRef.current, {
-            type: mediaRecorder.mimeType,
-          })
-
-          const formData = new FormData()
-          formData.append('audio', blob, 'recording.webm')
-
-          const res = await fetch('/api/widget/transcribe', {
-            method: 'POST',
-            body: formData,
-          })
-          const data = await res.json()
-
-          if (data.error) {
-            throw new Error(data.error)
-          }
-          if (data.text) {
-            onTranscription(data.text)
-          }
-          setState('idle')
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : 'Error al procesar el audio'
-          setErrorMessage(msg)
-          onError?.(msg)
-          setState('error')
-          setTimeout(() => setState('idle'), 3000)
-        }
-      }
-
-      mediaRecorder.start()
-      setState('recording')
-    } catch (err) {
-      const msg = err instanceof Error
-        ? (err.name === 'NotAllowedError'
-          ? 'Permiso de micrófono denegado. Actívalo en tu navegador.'
-          : err.message)
-        : 'No se pudo acceder al micrófono'
+  const startRecording = useCallback(() => {
+    if (!isSupported) {
+      const msg = 'Tu navegador no soporta entrada de voz. Usa Chrome o Edge.'
       setErrorMessage(msg)
       onError?.(msg)
       setState('error')
-      setTimeout(() => setState('idle'), 3000)
+      setTimeout(() => { setState('idle'); setErrorMessage(null) }, 3000)
+      return
     }
-  }, [onTranscription, onError])
 
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop()
+    setErrorMessage(null)
+    const SpeechRecognitionAPI = window.SpeechRecognition ?? window.webkitSpeechRecognition
+    const recognition = new SpeechRecognitionAPI()
+    recognition.lang = 'es-MX'
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
+    recognitionRef.current = recognition
+
+    recognition.onstart = () => setState('recording')
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript?.trim()
+      if (transcript) onTranscription(transcript)
     }
-  }, [])
+
+    recognition.onerror = (event) => {
+      const msg = event.error === 'not-allowed'
+        ? 'Permiso de micrófono denegado. Actívalo en tu navegador.'
+        : event.error === 'no-speech'
+          ? 'No se detectó voz. Intenta de nuevo.'
+          : 'Error al procesar el audio.'
+      setErrorMessage(msg)
+      onError?.(msg)
+      setState('error')
+      setTimeout(() => { setState('idle'); setErrorMessage(null) }, 3000)
+    }
+
+    recognition.onend = () => {
+      if (recognitionRef.current === recognition) {
+        setState('idle')
+      }
+    }
+
+    recognition.start()
+  }, [isSupported, onTranscription, onError])
 
   const toggleRecording = useCallback(() => {
     if (state === 'recording') {
@@ -93,11 +83,16 @@ export function useAudioInput({ onTranscription, onError }: UseAudioInputOptions
     }
   }, [state, startRecording, stopRecording])
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { recognitionRef.current?.abort() }
+  }, [])
+
   return {
     state,
     errorMessage,
+    isSupported,
     isRecording: state === 'recording',
-    isProcessing: state === 'processing',
     toggleRecording,
     startRecording,
     stopRecording,

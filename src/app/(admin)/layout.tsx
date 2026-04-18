@@ -1,10 +1,27 @@
+'use client'
+
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
+
+function LogoutButton() {
+  const router = useRouter()
+  async function logout() {
+    await fetch('/api/admin/auth', { method: 'DELETE' })
+    router.push('/login')
+  }
+  return (
+    <button onClick={logout} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
+      Cerrar sesión
+    </button>
+  )
+}
 
 const NAV_ITEMS = [
   { href: '/kb', label: 'Base de Conocimiento' },
   { href: '/tokens', label: 'Tokens de Widget' },
+  { href: '/conversaciones', label: 'Conversaciones' },
   { href: '/leads', label: 'Leads' },
   { href: '/logs', label: 'Logs de Errores' },
 ]
@@ -29,10 +46,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </Link>
           ))}
         </nav>
-        <div className="p-4 border-t border-gray-200">
-          <Link href="/" className="text-xs text-gray-400 hover:text-gray-600">
+        <div className="p-4 border-t border-gray-200 space-y-2">
+          <Link href="/" className="block text-xs text-gray-400 hover:text-gray-600">
             ← Volver al sitio
           </Link>
+          <LogoutButton />
         </div>
       </aside>
 

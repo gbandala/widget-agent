@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// Routes that are admin-only (require x-admin-key header)
 const ADMIN_PATTERNS = [
   /^\/api\/admin\/kb(\/|$)/,
   /^\/api\/admin\/tokens(\/|$)/,
@@ -8,11 +7,12 @@ const ADMIN_PATTERNS = [
   /^\/tokens(\/|$)/,
   /^\/leads(\/|$)/,
   /^\/logs(\/|$)/,
+  /^\/conversaciones(\/|$)/,
 ]
 
-// Public admin sub-routes (widget calls these directly)
 const ADMIN_PUBLIC_EXCEPTIONS = [
   /^\/api\/admin\/tokens\/validate(\/|$)/,
+  /^\/api\/admin\/auth(\/|$)/,
 ]
 
 export function proxy(req: NextRequest) {
@@ -23,23 +23,30 @@ export function proxy(req: NextRequest) {
 
   if (isAdminRoute && !isPublicException) {
     const adminKey = req.headers.get('x-admin-key')
+    const cookieKey = req.cookies.get('admin_key')?.value
     const expectedKey = process.env.ADMIN_SECRET_KEY
 
     if (!expectedKey) {
-      // If key not configured, block all access in production
       if (process.env.NODE_ENV === 'production') {
         return NextResponse.json(
           { error: 'Panel de administración no configurado' },
           { status: 503 }
         )
       }
-      // In dev, warn and allow (to avoid blocking local development)
       console.warn('[Admin Proxy] ADMIN_SECRET_KEY not set — admin routes are unprotected in dev')
       return NextResponse.next()
     }
 
-    if (adminKey !== expectedKey) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const isAuthorized = adminKey === expectedKey || cookieKey === expectedKey
+    if (!isAuthorized) {
+      // Redirect browser requests to login, return JSON for API requests
+      const isApiRequest = pathname.startsWith('/api/')
+      if (isApiRequest) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      const loginUrl = new URL('/login', req.url)
+      loginUrl.searchParams.set('from', pathname)
+      return NextResponse.redirect(loginUrl)
     }
   }
 
@@ -53,5 +60,6 @@ export const config = {
     '/tokens/:path*',
     '/leads/:path*',
     '/logs/:path*',
+    '/conversaciones/:path*',
   ],
 }
