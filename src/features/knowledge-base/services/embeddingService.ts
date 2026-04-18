@@ -7,7 +7,7 @@ import { embed } from 'ai'
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
   const { embedding } = await embed({
-    model: openrouter.embedding(MODELS.embeddings),
+    model: openrouter.embeddingModel(MODELS.embeddings),
     value: text.slice(0, 8000), // límite de tokens
   })
   return embedding

@@ -1,0 +1,80 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+```bash
+pnpm dev        # Dev server at http://localhost:3000
+pnpm build      # Production build (also runs type checking)
+pnpm typecheck  # Alias for build — runs tsc/next build
+pnpm lint       # ESLint
+pnpm setup      # Interactive CLI: creates DB tables, first widget token, loads KB seed
+```
+
+> Local dev on Windows with Turbopack may fail due to junction-point restrictions on USB drives. Use `pnpm dev -- --no-turbopack` or run the build on Vercel instead.
+
+## Architecture
+
+**Widget Agent** is a Next.js 16 app that acts as a hosted AI consulting widget embeddable in any landing page. A landing page authenticates via a `Bearer <widget_token>` header — each token is tied to a single `allowed_origin`.
+
+### Request pipeline (every widget chat message)
+
+```
+Landing Page
+  → Authorization: Bearer <widget_token>  +  Origin header
+  → [proxy.ts middleware]        admin-only route guard (x-admin-key)
+  → [/api/widget/chat]
+      1. Rate limit by IP hash
+      2. Token validation (60s in-memory cache, checks is_active + allowed_origin)
+      3. Rate limit by token
+      4. Prompt injection guard
+      5. Scope guard (off-topic → polite decline)
+      6. RAG search against kb_entries (pgvector cosine similarity)
+      7. Landing HTML read/cache in widget_sessions.landing_content
+      8. streamText via OpenRouter (AI SDK v6)
+      9. PII filter on output before saving to widget_messages
+```
+
+### Key abstractions
+
+| Path | Role |
+|------|------|
+| `src/lib/ai/openrouter.ts` | OpenRouter provider (usa `@ai-sdk/openai-compatible`) + model constants (`MODELS.fast/balanced/powerful/embeddings/whisper`) |
+| `src/lib/security/` | `promptGuard`, `scopeGuard`, `piiFilter`, `rateLimiter`, `widgetTokenValidator` |
+| `src/features/knowledge-base/services/` | `kbService` (Supabase search), `embeddingService` (OpenRouter embeddings) |
+| `src/features/widget/hooks/useWidgetChat.ts` | React hook — manages session init, `DefaultChatTransport`, and streaming |
+| `src/proxy.ts` | Next.js middleware — guards `/api/admin/*`, `/kb`, `/tokens`, `/leads`, `/logs` |
+| `scripts/setup.ts` | One-time CLI wizard for first deploy |
+
+### Tools in the chat route
+
+`captureContact` — no `execute`, requires frontend form completion before confirming.  
+`getAvailableSlots` — calls `/api/appointments` internally.  
+`bookAppointment` — no `execute`, requires a captured lead first.
+
+AI SDK v6 conventions used here: `inputSchema` (not `parameters`), `stopWhen: stepCountIs(5)`, `convertToModelMessages`, `toUIMessageStreamResponse`.
+
+**OpenRouter gotcha:** usar `@ai-sdk/openai-compatible` (no `@ai-sdk/openai`). El provider `createOpenAI` v3 usa el nuevo Responses API de OpenAI que OpenRouter no soporta. `createOpenAICompatible` fuerza Chat Completions API. Los embeddings usan `.embeddingModel()` (no `.embedding()`).
+
+### Database (Supabase + pgvector)
+
+Tables: `widget_tokens`, `kb_entries` (with `embedding VECTOR(1536)`), `widget_sessions`, `widget_messages`, `widget_leads`, `appointments`, `widget_error_logs`.
+
+Migrations are **manual** — paste `supabase/migrations/001_initial_schema.sql` into Supabase SQL Editor. Enable the `vector` extension first.
+
+PII fields (`email`, `phone` in `widget_leads`) are encrypted AES-256 server-side using `PII_ENCRYPTION_KEY`. The key is mandatory in production.
+
+### Admin panel
+
+Routes `/kb`, `/tokens`, `/leads`, `/logs` require `x-admin-key: <ADMIN_SECRET_KEY>` header. In dev, missing `ADMIN_SECRET_KEY` logs a warning and allows access. In production, missing key returns 503.
+
+### Embedding integration
+
+The widget is a React component (`src/features/widget/`) consumed from the same Next.js app. `NEXT_PUBLIC_DEMO_WIDGET_TOKEN` powers the demo on `/`. For external sites, the current options are iframe or copying the React component — the standalone `widget.js` bundle is on the roadmap.
+
+## Environment variables
+
+Required for local dev: `OPENROUTER_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_APP_URL`.  
+Required for production: add `PII_ENCRYPTION_KEY`, `ADMIN_SECRET_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`.  
+Optional: `GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN/CALENDAR_ID` for appointment scheduling.

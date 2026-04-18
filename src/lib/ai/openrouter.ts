@@ -1,9 +1,9 @@
-import { createOpenAI } from '@ai-sdk/openai'
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 
-export const openrouter = createOpenAI({
+export const openrouter = createOpenAICompatible({
+  name: 'openrouter',
   baseURL: 'https://openrouter.ai/api/v1',
   apiKey: process.env.OPENROUTER_API_KEY,
-  compatibility: 'compatible', // Fuerza Chat Completions API (OpenRouter no soporta Responses API)
   headers: {
     'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
     'X-Title': 'Widget Agent',

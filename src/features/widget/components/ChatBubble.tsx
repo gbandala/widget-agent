@@ -1,6 +1,8 @@
 'use client'
 
 import type { UIMessage } from 'ai'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface ChatBubbleProps {
   message: UIMessage
@@ -47,7 +49,21 @@ export function ChatBubble({ message, botName, botAvatarUrl }: ChatBubbleProps) 
 
         {/* Text content */}
         {text && (
-          <p className="whitespace-pre-wrap">{text}</p>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+              em: ({ children }) => <em className="italic">{children}</em>,
+              ul: ({ children }) => <ul className="list-disc list-inside space-y-0.5 my-1">{children}</ul>,
+              ol: ({ children }) => <ol className="list-decimal list-inside space-y-0.5 my-1">{children}</ol>,
+              li: ({ children }) => <li className="text-sm">{children}</li>,
+              a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="underline opacity-80 hover:opacity-100">{children}</a>,
+              code: ({ children }) => <code className="bg-black/10 px-1 rounded text-xs font-mono">{children}</code>,
+            }}
+          >
+            {text}
+          </ReactMarkdown>
         )}
       </div>
     </div>

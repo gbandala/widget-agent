@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files (no commitear valores reales)
+.env.local
+.env*.local
 
 # vercel
 .vercel
@@ -40,8 +41,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# QA reports (playwright)
+.qa-reports/
+
 # SaaS Factory scaffold (no parte del proyecto)
-CLAUDE.md
 GEMINI.md
 .mcp.json
 .claude/
