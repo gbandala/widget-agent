@@ -16,6 +16,10 @@ interface WidgetLauncherProps {
   botAvatarUrl?: string
   primaryColor?: string
   welcomeMessage?: string
+  /** 'embed' renders the chat filling its container (for iframe use); 'launcher' shows a FAB button */
+  mode?: 'launcher' | 'embed'
+  /** Override sourceUrl (useful in embed mode where window.location is the /embed page) */
+  initialSourceUrl?: string
 }
 
 function generateAnonId(): string {
@@ -51,11 +55,17 @@ export function WidgetLauncher({
   botName = 'Asistente',
   botAvatarUrl,
   welcomeMessage = '¡Hola! Soy tu asistente de consultoría. ¿En qué puedo ayudarte hoy?',
+  mode = 'launcher',
+  initialSourceUrl,
 }: WidgetLauncherProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  const isEmbed = mode === 'embed'
+  const [isOpen, setIsOpen] = useState(isEmbed)
   const [input, setInput] = useState('')
   const [anonId] = useState(() => generateAnonId())
-  const [sourceUrl] = useState(() => typeof window !== 'undefined' ? window.location.href : '')
+  const [sourceUrl] = useState(() => {
+    if (initialSourceUrl) return initialSourceUrl
+    return typeof window !== 'undefined' ? window.location.href : ''
+  })
   const [leadData, setLeadData] = useState<{ id: string; name: string; email: string } | null>(null)
   const [dismissedToolCalls, setDismissedToolCalls] = useState<Set<string>>(new Set())
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -156,11 +166,13 @@ export function WidgetLauncher({
       {/* Chat Window */}
       {isOpen && (
         <div
-          className="fixed bottom-24 right-6 z-50 w-[380px] max-w-[calc(100vw-24px)] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col"
-          style={{ height: '560px' }}
+          className={isEmbed
+            ? "fixed inset-0 z-50 bg-white flex flex-col"
+            : "fixed bottom-24 right-6 z-50 w-[380px] max-w-[calc(100vw-24px)] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col"}
+          style={isEmbed ? undefined : { height: '560px' }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-blue-600 rounded-t-2xl flex-shrink-0">
+          <div className={`flex items-center justify-between px-4 py-3 bg-blue-600 flex-shrink-0 ${isEmbed ? '' : 'rounded-t-2xl'}`}>
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center overflow-hidden">
                 {botAvatarUrl ? (
@@ -175,7 +187,9 @@ export function WidgetLauncher({
               </div>
             </div>
             <button
-              onClick={() => setIsOpen(false)}
+              onClick={isEmbed
+                ? () => window.parent?.postMessage({ type: 'widget-close' }, '*')
+                : () => setIsOpen(false)}
               className="text-white/80 hover:text-white transition-colors text-xl leading-none ml-2"
               aria-label="Cerrar chat"
             >
@@ -286,22 +300,24 @@ export function WidgetLauncher({
         </div>
       )}
 
-      {/* FAB Launcher Button */}
-      <button
-        onClick={() => setIsOpen(prev => !prev)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95"
-        aria-label={isOpen ? 'Cerrar chat' : 'Abrir chat de consultoría'}
-      >
-        {isOpen ? (
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        ) : (
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-        )}
-      </button>
+      {/* FAB Launcher Button — only in launcher mode */}
+      {!isEmbed && (
+        <button
+          onClick={() => setIsOpen(prev => !prev)}
+          className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center hover:scale-105 active:scale-95"
+          aria-label={isOpen ? 'Cerrar chat' : 'Abrir chat de consultoría'}
+        >
+          {isOpen ? (
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          ) : (
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+          )}
+        </button>
+      )}
     </>
   )
 }

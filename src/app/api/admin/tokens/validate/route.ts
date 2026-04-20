@@ -5,7 +5,7 @@ import { validateWidgetToken } from '@/lib/security/widgetTokenValidator'
 export async function POST(req: NextRequest) {
   try {
     const { token } = await req.json()
-    const origin = req.headers.get('origin') ?? ''
+    const origin = req.headers.get('x-source-origin') || req.headers.get('origin') || ''
 
     const result = await validateWidgetToken(token, origin)
 

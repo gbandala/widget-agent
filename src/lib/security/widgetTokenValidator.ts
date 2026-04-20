@@ -64,7 +64,7 @@ export async function requireWidgetToken(
   req: NextRequest
 ): Promise<{ ok: true; tokenId: string } | { ok: false; response: NextResponse }> {
   const token = req.headers.get('authorization')?.replace('Bearer ', '') ?? ''
-  const origin = req.headers.get('origin') ?? ''
+  const origin = req.headers.get('x-source-origin') || req.headers.get('origin') || ''
   const result = await validateWidgetToken(token, origin)
   if (!result.valid || !result.tokenId) {
     return {

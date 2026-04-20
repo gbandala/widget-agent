@@ -9,6 +9,18 @@ const nextConfig: NextConfig = {
   },
   // Required for cheerio SSR (landing reader)
   serverExternalPackages: ['cheerio'],
+  async headers() {
+    return [
+      {
+        // Allow /embed to be iframed from any origin
+        source: '/embed',
+        headers: [
+          { key: 'Content-Security-Policy', value: "frame-ancestors *" },
+          { key: 'X-Frame-Options', value: 'ALLOWALL' },
+        ],
+      },
+    ]
+  },
 }
 
 export default nextConfig

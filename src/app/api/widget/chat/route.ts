@@ -57,13 +57,15 @@ async function logError(
   } catch { /* log errors silently */ }
 }
 
+const normalizeOrigin = (o: string) => o.replace(/\/+$/, '').toLowerCase()
+
 // ---- Validate widget token (with 60s cache) ----
 async function validateToken(
   supabase: Awaited<ReturnType<typeof createServiceClient>>,
   token: string,
   origin: string
 ) {
-  const cacheKey = `${token}:${origin}`
+  const cacheKey = `${token}:${normalizeOrigin(origin)}`
   const cached = tokenCache.get(cacheKey)
   if (cached && cached.expiresAt > Date.now()) return cached.data
 
@@ -75,7 +77,8 @@ async function validateToken(
 
   if (error || !data) return null
   if (!data.is_active) return null
-  if (data.allowed_origin !== origin && data.allowed_origin !== '*') return null
+  if (data.allowed_origin !== '*' &&
+      normalizeOrigin(data.allowed_origin) !== normalizeOrigin(origin)) return null
 
   tokenCache.set(cacheKey, { data, expiresAt: Date.now() + TOKEN_CACHE_TTL })
   return data
@@ -99,6 +102,11 @@ TU MISIÓN:
 SCOPE ESTRICTO:
 - Solo responde preguntas relacionadas con los servicios, proyectos y tecnología de la consultoría
 - Si la pregunta es completamente ajena, declina cordialmente: "Mi especialidad es ayudarte con consultoría tecnológica. ¿Puedo orientarte en ese sentido?"
+
+PREGUNTAS SIN RESPUESTA:
+- Si el usuario hace una pregunta legítima sobre la empresa o sus servicios pero NO encuentras la respuesta en el conocimiento disponible, usa la herramienta logUnansweredQuestion para registrarla.
+- Después de registrarla, dile al usuario algo como: "Esa información no la tengo disponible en este momento. La he anotado para que el equipo la pueda responder pronto. ¿Hay algo más en lo que pueda ayudarte?"
+- NO inventes ni especules respuestas cuando no tengas la información.
 
 REGLAS DE PRIVACIDAD:
 - Nunca inventes ni repitas datos de contacto de personas
@@ -126,7 +134,9 @@ export async function POST(req: NextRequest) {
   const ip = ipRaw.split(',')[0].trim()
   const ipHash = Buffer.from(ip).toString('base64').slice(0, 20)
 
-  const origin = req.headers.get('origin') ?? ''
+  // x-source-origin is set by the widget transport to reflect the real host page
+  // (important in iframe/embed mode where Origin is the widget app, not the host site)
+  const origin = req.headers.get('x-source-origin') || req.headers.get('origin') || ''
   const token = req.headers.get('authorization')?.replace('Bearer ', '') ?? ''
   const anonId = req.headers.get('x-anon-id') ?? ''
 
@@ -255,6 +265,24 @@ export async function POST(req: NextRequest) {
           notes: z.string().optional().describe('Notas del tema a tratar'),
         }),
         // Sin execute — requiere que el lead ya esté capturado
+      }),
+
+      logUnansweredQuestion: tool({
+        description: 'Registra una pregunta legítima del usuario que no tiene respuesta en la KB ni en la landing. Usar SOLO cuando el usuario pregunta algo real sobre la empresa/servicios pero no hay información disponible.',
+        inputSchema: z.object({
+          question: z.string().describe('La pregunta del usuario, exacta o parafraseada'),
+        }),
+        execute: async ({ question }) => {
+          try {
+            await supabase.from('kb_pending_questions').insert({
+              question: question.slice(0, 500),
+              session_id: sessionId ?? null,
+              token_id: tokenData.id,
+              source_url: sourceUrl || null,
+            })
+          } catch { /* silently ignore */ }
+          return { logged: true }
+        },
       }),
     }
 

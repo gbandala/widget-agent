@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Widget Test — Local</title>
+  <style>
+    body { font-family: sans-serif; max-width: 800px; margin: 60px auto; padding: 0 24px; color: #1e293b; }
+    h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    p { color: #64748b; line-height: 1.6; }
+    .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin: 24px 0; }
+    code { background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 0.875rem; }
+  </style>
+</head>
+<body>
+  <h1>Página de prueba — Widget embed (LOCAL)</h1>
+  <p>
+    Esta página simula un sitio externo que embebe el widget via <code>widget.js</code>.<br/>
+    Usa el token DEV (<code>allowed_origin: http://localhost:3000</code>).<br/>
+    El botón azul aparece abajo a la derecha.
+  </p>
+
+  <div class="card">
+    <strong>Modo script tag (widget.js)</strong><br/><br/>
+    El widget se carga con el token DEV de <code>NEXT_PUBLIC_DEMO_WIDGET_TOKEN</code>.<br/>
+    Fuente del iframe: <code>http://localhost:3000/embed</code>
+  </div>
+
+  <p style="color:#94a3b8;font-size:0.8rem;margin-top:40px;">
+    Para probar con el token de producción (clariifica.com), reemplaza <code>data-token</code>
+    con el valor de <code>WIDGET_TOKEN_PROD</code> en .env.local <em>y</em> accede desde el dominio autorizado.
+  </p>
+
+  <!-- Token DEV: allowed_origin http://localhost:3000 -->
+  <script
+    src="http://localhost:3000/widget.js"
+    data-token="b39146f09a292da7a43645931918496fe3b28de787a8f7fb3119cf0a07464ec8"
+    data-bot-name="Sofia"
+    data-welcome-message="¡Hola! Soy Sofia, asistente de prueba local. ¿En qué puedo ayudarte?"
+  ></script>
+</body>
+</html>

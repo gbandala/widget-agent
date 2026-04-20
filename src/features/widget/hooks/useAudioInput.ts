@@ -9,18 +9,39 @@ interface UseAudioInputOptions {
   onError?: (message: string) => void
 }
 
-// Extend Window type for cross-browser SpeechRecognition
+// Minimal interfaces matching the Web Speech API subset we use
+interface SpeechRecognitionResultEvent {
+  results: { 0: { transcript: string } }[]
+}
+interface SpeechRecognitionErrEvent {
+  error: string
+}
+interface SpeechRecognitionInstance {
+  lang: string
+  interimResults: boolean
+  maxAlternatives: number
+  onstart: (() => void) | null
+  onresult: ((e: SpeechRecognitionResultEvent) => void) | null
+  onerror: ((e: SpeechRecognitionErrEvent) => void) | null
+  onend: (() => void) | null
+  start(): void
+  stop(): void
+  abort(): void
+}
+
 declare global {
   interface Window {
-    SpeechRecognition: typeof SpeechRecognition
-    webkitSpeechRecognition: typeof SpeechRecognition
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    SpeechRecognition: new () => SpeechRecognitionInstance
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    webkitSpeechRecognition: new () => SpeechRecognitionInstance
   }
 }
 
 export function useAudioInput({ onTranscription, onError }: UseAudioInputOptions) {
   const [state, setState] = useState<AudioState>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
 
   const isSupported = typeof window !== 'undefined' &&
     ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
