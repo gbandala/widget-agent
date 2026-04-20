@@ -1,15 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { KBEntry, KBCategory } from '../types'
-
-const CATEGORIES: { value: KBCategory; label: string }[] = [
-  { value: 'service', label: 'Servicio' },
-  { value: 'project_case', label: 'Caso de Proyecto' },
-  { value: 'capability', label: 'Capacidad' },
-  { value: 'faq', label: 'FAQ' },
-  { value: 'pricing', label: 'Precios' },
-]
+import type { KBEntry } from '../types'
+import { SUGGESTED_CATEGORIES } from '../types'
+import { ImportWizard } from './ImportWizard'
 
 interface PendingQuestion {
   id: string
@@ -29,15 +23,24 @@ function EntryForm({
   initial,
   onSave,
   onCancel,
+  existingCategories = [],
 }: {
   initial?: Partial<KBEntry>
   onSave: (data: Partial<KBEntry>) => void
   onCancel: () => void
+  existingCategories?: string[]
 }) {
   const [title, setTitle] = useState(initial?.title ?? '')
   const [content, setContent] = useState(initial?.content ?? '')
-  const [category, setCategory] = useState<KBCategory>(initial?.category ?? 'service')
+  const [category, setCategory] = useState(initial?.category ?? 'service')
   const [tags, setTags] = useState((initial?.tags ?? []).join(', '))
+
+  const categorySuggestions = [
+    ...SUGGESTED_CATEGORIES,
+    ...existingCategories
+      .filter(c => !SUGGESTED_CATEGORIES.find(s => s.value === c))
+      .map(c => ({ value: c, label: c })),
+  ]
   const [saving, setSaving] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -78,15 +81,18 @@ function EntryForm({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-          <select
+          <input
+            list="kb-category-suggestions"
             value={category}
-            onChange={e => setCategory(e.target.value as KBCategory)}
+            onChange={e => setCategory(e.target.value)}
             className="w-full border rounded-lg px-3 py-2 text-sm text-gray-900 bg-white"
-          >
-            {CATEGORIES.map(c => (
+            placeholder="Ej: service, faq, ventas..."
+          />
+          <datalist id="kb-category-suggestions">
+            {categorySuggestions.map(c => (
               <option key={c.value} value={c.value}>{c.label}</option>
             ))}
-          </select>
+          </datalist>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Tags (separados por coma)</label>
@@ -283,7 +289,7 @@ export function KBAdmin() {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'kb' | 'pending'>('kb')
+  const [tab, setTab] = useState<'kb' | 'pending' | 'import'>('kb')
   const [stats, setStats] = useState<KBStats>({ entryCount: 0, totalChars: 0 })
   const [pendingCount, setPendingCount] = useState(0)
 
@@ -372,12 +378,20 @@ export function KBAdmin() {
           <p className="text-sm text-gray-500 mt-1">{entries.length} entradas totales</p>
         </div>
         {tab === 'kb' && (
-          <button
-            onClick={() => setCreating(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
-          >
-            + Nueva Entrada
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setTab('import')}
+              className="px-4 py-2 border text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+            >
+              ↑ Importar archivo
+            </button>
+            <button
+              onClick={() => setCreating(true)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+            >
+              + Nueva Entrada
+            </button>
+          </div>
         )}
       </div>
 
@@ -407,6 +421,14 @@ export function KBAdmin() {
             </span>
           )}
         </button>
+        <button
+          onClick={() => setTab('import')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            tab === 'import' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Importar
+        </button>
       </div>
 
       {error && (
@@ -423,6 +445,7 @@ export function KBAdmin() {
             <EntryForm
               onSave={handleCreate}
               onCancel={() => setCreating(false)}
+              existingCategories={[...new Set(entries.map(e => e.category))]}
             />
           )}
 
@@ -433,6 +456,7 @@ export function KBAdmin() {
                   initial={entry}
                   onSave={data => handleUpdate(entry.id, data)}
                   onCancel={() => setEditing(null)}
+                  existingCategories={[...new Set(entries.map(e => e.category))]}
                 />
               ) : (
                 <>
@@ -440,7 +464,7 @@ export function KBAdmin() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs font-medium px-2 py-0.5 bg-blue-50 text-blue-700 rounded">
-                          {CATEGORIES.find(c => c.value === entry.category)?.label ?? entry.category}
+                          {SUGGESTED_CATEGORIES.find(c => c.value === entry.category)?.label ?? entry.category}
                         </span>
                         {!entry.isActive && (
                           <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded">Inactiva</span>
@@ -495,6 +519,20 @@ export function KBAdmin() {
 
       {/* Pending tab */}
       {tab === 'pending' && <PendingTab />}
+
+      {/* Import tab */}
+      {tab === 'import' && (
+        <ImportWizard
+          existingCategories={[...new Set(entries.map(e => e.category))]}
+          onImported={(count) => {
+            setTab('kb')
+            load()
+            setError(null)
+            alert(`${count} entrada${count !== 1 ? 's' : ''} importada${count !== 1 ? 's' : ''} exitosamente`)
+          }}
+          onClose={() => setTab('kb')}
+        />
+      )}
     </div>
   )
 }

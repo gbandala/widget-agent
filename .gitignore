@@ -44,6 +44,9 @@ next-env.d.ts
 # QA reports (playwright)
 .qa-reports/
 
+# Archivos de prueba local (no subir al repo)
+/test-files/
+
 # SaaS Factory scaffold (no parte del proyecto)
 GEMINI.md
 .mcp.json

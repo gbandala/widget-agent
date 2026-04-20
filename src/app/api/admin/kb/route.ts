@@ -5,7 +5,7 @@ import { z } from 'zod'
 const KBEntrySchema = z.object({
   title: z.string().min(3).max(200),
   content: z.string().min(10).max(10000),
-  category: z.enum(['service', 'project_case', 'capability', 'faq', 'pricing']),
+  category: z.string().min(1).max(50),
   tags: z.array(z.string()).optional(),
 })
 

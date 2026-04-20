@@ -57,11 +57,29 @@ AI SDK v6 conventions used here: `inputSchema` (not `parameters`), `stopWhen: st
 
 **OpenRouter gotcha:** usar `@ai-sdk/openai-compatible` (no `@ai-sdk/openai`). El provider `createOpenAI` v3 usa el nuevo Responses API de OpenAI que OpenRouter no soporta. `createOpenAICompatible` fuerza Chat Completions API. Los embeddings usan `.embeddingModel()` (no `.embedding()`).
 
+### Knowledge Base — file import
+
+The KB admin has a 3-step file import wizard (`/kb` → tab "Importar"):
+
+1. **Upload** — drag-and-drop dropzone, supports PDF, PPTX, PPT, DOCX, TXT, XLSX/XLS (max 5 MB)
+2. **Processing** — `POST /api/admin/kb/parse-file` extracts raw text, then `POST /api/admin/kb/structure` calls OpenRouter to split and label entries
+3. **Review** — grid of proposed cards, each editable (title, content, category combobox, tags); checkboxes to select; bulk save via `POST /api/admin/kb/bulk`
+
+Categories are now **dynamic** (no enum constraint) — the 5 predefined ones (`service`, `project_case`, `capability`, `faq`, `pricing`) are suggestions in a `<datalist>` combobox; admins can type any new category.
+
+| New API route | Purpose |
+|---|---|
+| `POST /api/admin/kb/parse-file` | Multipart file → `{ rawText, filename, fileType, charCount }` |
+| `POST /api/admin/kb/structure` | `{ rawText, existingCategories }` → `{ entries: ProposedEntry[] }` |
+| `POST /api/admin/kb/bulk` | `{ entries: KBEntryInput[] }` → embeds + bulk insert, returns `{ imported, failed }` |
+
+**PPT gotcha:** `officeparser` requires a file path (not a Buffer) — PPTX is written to `os.tmpdir()` first, then cleaned up. Old `.ppt` binary format uses the `cfb` library with recursive record traversal (TextCharsAtom 0x0FA0).
+
 ### Database (Supabase + pgvector)
 
 Tables: `widget_tokens`, `kb_entries` (with `embedding VECTOR(1536)`), `widget_sessions`, `widget_messages`, `widget_leads`, `appointments`, `widget_error_logs`.
 
-Migrations are **manual** — paste `supabase/migrations/001_initial_schema.sql` into Supabase SQL Editor. Enable the `vector` extension first.
+Migrations are **manual** — paste SQL files from `supabase/migrations/` into Supabase SQL Editor in order. Enable the `vector` extension first.
 
 PII fields (`email`, `phone` in `widget_leads`) are encrypted AES-256 server-side using `PII_ENCRYPTION_KEY`. The key is mandatory in production.
 
