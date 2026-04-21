@@ -7,14 +7,21 @@ const TokenSchema = z.object({
   allowed_origin: z.string().url(),
   bot_name: z.string().min(1).max(50).optional(),
   bot_avatar_url: z.string().url().optional().nullable(),
+  agent_language: z.string().max(10).optional(),
+  agent_tone: z.string().max(30).optional(),
+  agent_instructions: z.string().max(2000).optional().nullable(),
+  agent_scope: z.string().max(1000).optional().nullable(),
+  welcome_message: z.string().max(300).optional().nullable(),
 })
+
+const SELECT_FIELDS = 'id, token, label, allowed_origin, is_active, bot_name, bot_avatar_url, agent_language, agent_tone, agent_instructions, agent_scope, welcome_message, created_at'
 
 export async function GET() {
   try {
     const supabase = await createServiceClient()
     const { data, error } = await supabase
       .from('widget_tokens')
-      .select('id, token, label, allowed_origin, is_active, bot_name, bot_avatar_url, created_at')
+      .select(SELECT_FIELDS)
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -55,9 +62,14 @@ export async function PATCH(req: NextRequest) {
 
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
     if (typeof is_active === 'boolean') updates.is_active = is_active
+    if (rest.label) updates.label = rest.label
     if (rest.bot_name) updates.bot_name = rest.bot_name
     if (rest.bot_avatar_url !== undefined) updates.bot_avatar_url = rest.bot_avatar_url
-    if (rest.label) updates.label = rest.label
+    if (rest.agent_language) updates.agent_language = rest.agent_language
+    if (rest.agent_tone) updates.agent_tone = rest.agent_tone
+    if ('agent_instructions' in rest) updates.agent_instructions = rest.agent_instructions
+    if ('agent_scope' in rest) updates.agent_scope = rest.agent_scope
+    if ('welcome_message' in rest) updates.welcome_message = rest.welcome_message
 
     const { error } = await supabase.from('widget_tokens').update(updates).eq('id', id)
     if (error) throw error

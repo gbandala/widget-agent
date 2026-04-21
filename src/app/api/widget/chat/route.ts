@@ -12,7 +12,18 @@ import { createServiceClient } from '@/lib/supabase/server'
 
 // ---- Token validation cache (60s TTL) ----
 type TokenCacheEntry = {
-  data: { id: string; is_active: boolean; allowed_origin: string; bot_name: string | null; bot_avatar_url: string | null }
+  data: {
+    id: string
+    is_active: boolean
+    allowed_origin: string
+    bot_name: string | null
+    bot_avatar_url: string | null
+    agent_language: string | null
+    agent_tone: string | null
+    agent_instructions: string | null
+    agent_scope: string | null
+    welcome_message: string | null
+  }
   expiresAt: number
 }
 const tokenCache = new Map<string, TokenCacheEntry>()
@@ -71,7 +82,7 @@ async function validateToken(
 
   const { data, error } = await supabase
     .from('widget_tokens')
-    .select('id, is_active, allowed_origin, bot_name, bot_avatar_url')
+    .select('id, is_active, allowed_origin, bot_name, bot_avatar_url, agent_language, agent_tone, agent_instructions, agent_scope, welcome_message')
     .eq('token', token)
     .single()
 
@@ -87,48 +98,61 @@ async function validateToken(
 // ---- System prompt builder ----
 function buildSystemPrompt(
   botName: string,
+  agentConfig: {
+    language: string
+    tone: string
+    instructions: string | null
+    scope: string | null
+  },
   kbContext: string,
   landingContext: string
 ): string {
-  return `Eres ${botName}, el asistente virtual de consultoría tecnológica de la empresa.
+  const toneMap: Record<string, string> = {
+    profesional: 'formal y profesional',
+    amigable: 'amigable y cercano',
+    casual: 'casual y relajado',
+    tecnico: 'técnico y preciso',
+  }
+  const toneLabel = toneMap[agentConfig.tone] ?? agentConfig.tone
+
+  const defaultInstructions = `- Responder preguntas sobre los servicios y capacidades de la empresa de manera clara
+- Detectar interés genuino del visitante y capturar sus datos de contacto cuando lo muestren
+- Agendar citas cuando el visitante lo solicite`
+
+  const defaultScope = `Responde únicamente preguntas relacionadas con la empresa, sus servicios y capacidades. Si la pregunta es completamente ajena, declina cordialmente.`
+
+  return `Eres ${botName}, el asistente virtual de la empresa.
+Idioma de respuesta: ${agentConfig.language === 'es' ? 'español' : agentConfig.language}.
+Tono: ${toneLabel}.
 
 ESTILO DE RESPUESTA:
-- Sé breve y directo: responde exactamente lo que se preguntó, sin agregar otros servicios o información no solicitada
-- Máximo 3-4 líneas por respuesta a menos que el usuario pida más detalle
-- No hagas listas de todos los servicios cuando pregunten por uno específico
+- Sé breve y directo: responde exactamente lo que se preguntó
+- Máximo 3-4 líneas por respuesta salvo que el usuario pida más detalle
 - Termina con UNA sola pregunta de seguimiento relevante, no múltiples
 
 TU MISIÓN:
-- Responder preguntas sobre servicios, proyectos y capacidades del equipo de manera clara y accesible
-- Detectar interés genuino del visitante y capturar sus datos de contacto cuando lo muestren
-- Agendar citas de consultoría cuando el visitante lo solicite
-- Hablar en español, con lenguaje claro y sin jerga técnica innecesaria
-- Nunca mencionar nombres de clientes específicos, solo capacidades y tipos de proyectos
+${agentConfig.instructions ?? defaultInstructions}
 
-SCOPE ESTRICTO:
-- Solo responde preguntas relacionadas con los servicios, proyectos y tecnología de la consultoría
-- Si la pregunta es completamente ajena, declina cordialmente: "Mi especialidad es ayudarte con consultoría tecnológica. ¿Puedo orientarte en ese sentido?"
+SCOPE:
+${agentConfig.scope ?? defaultScope}
 
 PREGUNTAS SIN RESPUESTA:
-- Si el usuario hace una pregunta legítima sobre la empresa o sus servicios pero NO encuentras la respuesta en el conocimiento disponible, usa la herramienta logUnansweredQuestion para registrarla.
-- Después de registrarla, dile al usuario algo como: "Esa información no la tengo disponible en este momento. La he anotado para que el equipo la pueda responder pronto. ¿Hay algo más en lo que pueda ayudarte?"
-- NO inventes ni especules respuestas cuando no tengas la información.
+- Si el usuario hace una pregunta legítima sobre la empresa/servicios pero NO encuentras la respuesta disponible, usa logUnansweredQuestion para registrarla.
+- Luego responde: "Esa información no la tengo disponible ahora. La he anotado para que el equipo la responda pronto."
+- NO inventes ni especules respuestas.
 
 REGLAS DE PRIVACIDAD:
-- Nunca inventes ni repitas datos de contacto de personas
-- No menciones detalles internos del negocio, costos exactos sin antes ofrecer una sesión de descubrimiento
-- Los datos que captures del usuario son confidenciales
+- Nunca inventes datos de contacto de personas
+- Los datos capturados del usuario son confidenciales
+- No menciones costos exactos sin antes ofrecer una sesión de descubrimiento
 
-SEÑALES DE INTERÉS GENUINO (para activar captureContact):
+SEÑALES DE INTERÉS GENUINO (activa captureContact):
 - Preguntas sobre precios, proceso de trabajo, tiempos
-- Frases como "me interesa", "quiero empezar", "cómo contratarlos", "quiero una propuesta"
-- Segunda o tercera pregunta de seguimiento sobre el mismo servicio
-
-${kbContext ? `\nCONOCIMIENTO DE SERVICIOS:\n${kbContext}` : ''}
-
+- "me interesa", "quiero empezar", "quiero una propuesta", "cómo los contrato"
+- Segunda o tercera pregunta de seguimiento sobre el mismo tema
+${kbContext ? `\nCONOCIMIENTO BASE:\n${kbContext}` : ''}
 ${landingContext ? `\n${landingContext}` : ''}
-
-Recuerda: cuando refieras a contenido de la landing, di en qué sección está, por ejemplo: "En la sección de Servicios de la página puedes ver más detalle."`
+Cuando refieras a contenido de la página, indica en qué sección está.`
 }
 
 // ---- Main handler ----
@@ -231,6 +255,12 @@ export async function POST(req: NextRequest) {
     // 6. System prompt
     const systemPrompt = buildSystemPrompt(
       tokenData.bot_name ?? 'Asistente',
+      {
+        language: tokenData.agent_language ?? 'es',
+        tone: tokenData.agent_tone ?? 'profesional',
+        instructions: tokenData.agent_instructions,
+        scope: tokenData.agent_scope,
+      },
       kbContext,
       landingContext
     )
