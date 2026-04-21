@@ -12,16 +12,28 @@ export async function getAvailableSlots(
 ): Promise<AppointmentSlot[]> {
   const calendar = getCalendarClient()
 
-  // Calcular rango del día solicitado
-  const targetDate = date
-    ? new Date(date)
-    : (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d })()
+  // Configuración desde env
+  const availableDays = (process.env.APPOINTMENTS_AVAILABLE_DAYS ?? '1,2,3,4,5,6')
+    .split(',').map(Number)
+  const [startH, startM] = (process.env.APPOINTMENTS_START_HOUR ?? '15:00').split(':').map(Number)
+  const [endH, endM]     = (process.env.APPOINTMENTS_END_HOUR   ?? '20:00').split(':').map(Number)
+  const timezone = process.env.APPOINTMENTS_TIMEZONE ?? 'America/Mexico_City'
 
-  // Horario laboral: 9am - 6pm
-  const startOfDay = new Date(targetDate)
-  startOfDay.setHours(9, 0, 0, 0)
-  const endOfDay = new Date(targetDate)
-  endOfDay.setHours(18, 0, 0, 0)
+  // Fecha objetivo en la zona horaria configurada
+  const dateStr = date ?? new Date(
+    new Date().toLocaleString('en-US', { timeZone: timezone })
+  ).toLocaleDateString('en-CA') // YYYY-MM-DD mañana
+
+  // Verificar día disponible (calcular day-of-week en timezone correcto)
+  const dayOfWeek = new Date(
+    new Date(`${dateStr}T12:00:00`).toLocaleString('en-US', { timeZone: timezone })
+  ).getDay()
+  if (!availableDays.includes(dayOfWeek)) return []
+
+  // Construir inicio y fin como ISO strings en la timezone configurada
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const startOfDay = new Date(`${dateStr}T${pad(startH)}:${pad(startM)}:00`)
+  const endOfDay   = new Date(`${dateStr}T${pad(endH)}:${pad(endM)}:00`)
 
   // Obtener eventos ocupados
   const freeBusy = await calendar.freebusy.query({
