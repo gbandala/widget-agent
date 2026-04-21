@@ -75,6 +75,25 @@ Categories are now **dynamic** (no enum constraint) — the 5 predefined ones (`
 
 **PPT gotcha:** `officeparser` requires a file path (not a Buffer) — PPTX is written to `os.tmpdir()` first, then cleaned up. Old `.ppt` binary format uses the `cfb` library with recursive record traversal (TextCharsAtom 0x0FA0).
 
+### Google Calendar — appointment scheduling
+
+Booking flow: `captureContact` (lead) → `getAvailableSlots` → `bookAppointment` (creates Google Calendar event + Meet link).
+
+**OAuth2 setup (one-time):** Run `node scripts/get-google-token.mjs` locally — starts a server on `localhost:3001/callback`, opens browser for Google auth, prints the refresh token. Requires `http://localhost:3001/callback` as an authorized redirect URI in Google Cloud Console.
+
+**Business hours** are configured via env vars (dynamic, no code change needed):
+
+| Variable | Example | Description |
+|---|---|---|
+| `APPOINTMENTS_AVAILABLE_DAYS` | `1,2,3,4,5,6` | Days available (0=Sun…6=Sat) |
+| `APPOINTMENTS_START_HOUR` | `15:00` | Start time (24h local timezone) |
+| `APPOINTMENTS_END_HOUR` | `20:00` | End time (24h local timezone) |
+| `APPOINTMENTS_TIMEZONE` | `America/Mexico_City` | IANA timezone |
+
+**Timezone gotcha:** Vercel runs in UTC — `new Date('YYYY-MM-DDThh:mm')` without suffix is UTC, not local time. Slot count is calculated dynamically from hour range ÷ duration (no hardcoded `slice(8)`).
+
+**Calendly note:** Free plan has no booking API — only manual scheduling page. Google Calendar integration is the production solution.
+
 ### Database (Supabase + pgvector)
 
 Tables: `widget_tokens`, `kb_entries` (with `embedding VECTOR(1536)`), `widget_sessions`, `widget_messages`, `widget_leads`, `appointments`, `widget_error_logs`.

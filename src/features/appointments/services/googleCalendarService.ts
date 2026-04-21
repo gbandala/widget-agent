@@ -85,7 +85,10 @@ export async function getAvailableSlots(
     current.setTime(current.getTime() + 30 * 60 * 1000)
   }
 
-  return availableSlots.slice(0, 8) // Máximo 8 opciones
+  // Calcular máximo de slots según duración del horario configurado
+  const totalMinutes = (endH * 60 + endM) - (startH * 60 + startM)
+  const maxSlots = Math.floor(totalMinutes / durationMinutes)
+  return availableSlots.slice(0, maxSlots)
 }
 
 /**
