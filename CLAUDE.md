@@ -12,11 +12,11 @@ pnpm lint       # ESLint
 pnpm setup      # Interactive CLI: creates DB tables, first widget token, loads KB seed
 ```
 
-> Local dev on Windows with Turbopack may fail due to junction-point restrictions on USB drives. Use `pnpm dev -- --no-turbopack` or run the build on Vercel instead.
+> Local dev on Windows: `pnpm dev` uses Turbopack by default. If it fails on USB/junction-point drives use `pnpm exec next dev` instead.
 
 ## Architecture
 
-**Widget Agent** is a Next.js 16 app that acts as a hosted AI consulting widget embeddable in any landing page. A landing page authenticates via a `Bearer <widget_token>` header — each token is tied to a single `allowed_origin`.
+**Widget Agent** is a Next.js 16 app — an embeddable AI chat widget for any landing page. It is **domain-agnostic**: personality, language, scope, tone and instructions are configured per token from the admin panel, not hardcoded. A landing page authenticates via a `Bearer <widget_token>` header — each token is tied to a single `allowed_origin`.
 
 ### Request pipeline (every widget chat message)
 
@@ -94,11 +94,41 @@ Booking flow: `captureContact` (lead) → `getAvailableSlots` → `bookAppointme
 
 **Calendly note:** Free plan has no booking API — only manual scheduling page. Google Calendar integration is the production solution.
 
+### Agent personality per token
+
+Each `widget_token` carries its own agent config — no hardcoded domain anywhere:
+
+| Field | Default | Purpose |
+|---|---|---|
+| `agent_language` | `'es'` | Response language |
+| `agent_tone` | `'profesional'` | `profesional` / `amigable` / `casual` / `tecnico` |
+| `agent_instructions` | null | Free-text mission/instructions (bullets or prose) |
+| `agent_scope` | null | Allowed topics — model enforced via system prompt |
+| `agent_use_emojis` | `true` | When false, injects "No uses emojis" into system prompt |
+| `welcome_message` | null | Opening message shown in the widget UI |
+
+`buildSystemPrompt()` (`src/app/api/widget/chat/route.ts`) assembles the system prompt fully from token config. `scopeGuard.ts` only blocks universally harmful content — topic scope is model-enforced.
+
+`embed/page.tsx` reads `bot_name`, `bot_avatar_url`, `welcome_message` directly from Supabase (server component) — URL params are optional overrides only.
+
+### CLI setup vs Admin panel
+
+Both coexist by design — different lifecycle moments:
+- **`pnpm setup`** (CLI): first deploy only — creates DB tables, generates first token, creates KB seed template. Run once per new installation.
+- **Admin `/tokens`**: day-to-day — create additional tokens, edit personality, activate/deactivate.
+
 ### Database (Supabase + pgvector)
 
 Tables: `widget_tokens`, `kb_entries` (with `embedding VECTOR(1536)`), `widget_sessions`, `widget_messages`, `widget_leads`, `appointments`, `widget_error_logs`.
 
 Migrations are **manual** — paste SQL files from `supabase/migrations/` into Supabase SQL Editor in order. Enable the `vector` extension first.
+
+| Migration | Contents |
+|---|---|
+| `001_initial_schema.sql` | Base schema — all tables, pgvector, indexes, RLS |
+| `002_kb_pending_questions.sql` | `kb_pending_questions` table |
+| `003_dynamic_categories.sql` | Drops CHECK constraint on `kb_entries.category` |
+| `004_agent_config.sql` | Adds agent personality columns + `agent_use_emojis` to `widget_tokens` |
 
 PII fields (`email`, `phone` in `widget_leads`) are encrypted AES-256 server-side using `PII_ENCRYPTION_KEY`. The key is mandatory in production.
 

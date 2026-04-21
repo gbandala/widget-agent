@@ -119,6 +119,10 @@ async function main() {
       bot_name: botName,
       bot_avatar_url: botAvatarUrl,
       is_active: true,
+      agent_language: 'es',
+      agent_tone: 'profesional',
+      agent_use_emojis: true,
+      // agent_instructions, agent_scope y welcome_message se configuran desde el panel admin
     })
     .select()
     .single()
@@ -146,16 +150,22 @@ async function main() {
     if (!fs.existsSync(templatePath)) {
       fs.writeFileSync(templatePath, JSON.stringify([
         {
-          title: "Ejemplo: Servicio de Desarrollo Web",
-          content: "Desarrollamos aplicaciones web modernas con React, Next.js y TypeScript. Nos especializamos en aplicaciones SaaS, dashboards y plataformas con integraciones de IA.",
+          title: "Ejemplo: Servicio principal",
+          content: "Describe aquí tu servicio principal: qué ofreces, a quién va dirigido y cuál es el beneficio clave para el cliente.",
           category: "service",
-          tags: ["web", "react", "nextjs", "saas"]
+          tags: ["servicio", "principal"]
         },
         {
-          title: "Ejemplo: Capacidad de Equipo",
-          content: "Nuestro equipo cuenta con experiencia en arquitectura de microservicios, integración con APIs de terceros, autenticación con OAuth2/Supabase y despliegue en Vercel/AWS.",
-          category: "capability",
-          tags: ["equipo", "backend", "cloud"]
+          title: "Ejemplo: Pregunta frecuente",
+          content: "¿Cómo funciona el proceso de contratación? Aquí puedes describir los pasos típicos desde el primer contacto hasta el inicio del proyecto.",
+          category: "faq",
+          tags: ["proceso", "contratacion"]
+        },
+        {
+          title: "Ejemplo: Caso de éxito",
+          content: "Describe un proyecto representativo: el reto del cliente, la solución implementada y los resultados obtenidos (sin mencionar nombres de clientes).",
+          category: "project_case",
+          tags: ["caso", "exito", "resultados"]
         }
       ], null, 2))
       log('Template de KB creado en supabase/seed/kb.example.json')
@@ -175,7 +185,8 @@ async function main() {
   console.log(`    window.WIDGET_TOKEN = "${tokenData.token}";`)
   console.log(`  </script>`)
   console.log(`  <script src="${allowedOrigin || 'http://localhost:3000'}/widget.js" defer></script>`)
-  console.log('\n  Panel Admin:   http://localhost:3000/admin')
+  console.log('\n  Panel Admin:   http://localhost:3000/tokens')
+  console.log('  (configura la personalidad del agente desde el panel admin)')
   console.log('\n════════════════════════════════════════\n')
 }
 
