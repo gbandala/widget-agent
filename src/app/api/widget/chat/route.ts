@@ -22,6 +22,7 @@ type TokenCacheEntry = {
     agent_tone: string | null
     agent_instructions: string | null
     agent_scope: string | null
+    agent_use_emojis: boolean | null
     welcome_message: string | null
   }
   expiresAt: number
@@ -82,7 +83,7 @@ async function validateToken(
 
   const { data, error } = await supabase
     .from('widget_tokens')
-    .select('id, is_active, allowed_origin, bot_name, bot_avatar_url, agent_language, agent_tone, agent_instructions, agent_scope, welcome_message')
+    .select('id, is_active, allowed_origin, bot_name, bot_avatar_url, agent_language, agent_tone, agent_instructions, agent_scope, agent_use_emojis, welcome_message')
     .eq('token', token)
     .single()
 
@@ -103,6 +104,7 @@ function buildSystemPrompt(
     tone: string
     instructions: string | null
     scope: string | null
+    useEmojis: boolean
   },
   kbContext: string,
   landingContext: string
@@ -123,7 +125,7 @@ function buildSystemPrompt(
 
   return `Eres ${botName}, el asistente virtual de la empresa.
 Idioma de respuesta: ${agentConfig.language === 'es' ? 'español' : agentConfig.language}.
-Tono: ${toneLabel}.
+Tono: ${toneLabel}.${agentConfig.useEmojis ? '' : '\nNo uses emojis en ninguna respuesta.'}
 
 ESTILO DE RESPUESTA:
 - Sé breve y directo: responde exactamente lo que se preguntó
@@ -260,6 +262,7 @@ export async function POST(req: NextRequest) {
         tone: tokenData.agent_tone ?? 'profesional',
         instructions: tokenData.agent_instructions,
         scope: tokenData.agent_scope,
+        useEmojis: tokenData.agent_use_emojis ?? true,
       },
       kbContext,
       landingContext

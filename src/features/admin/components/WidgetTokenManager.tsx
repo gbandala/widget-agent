@@ -14,6 +14,7 @@ interface WidgetToken {
   agent_tone: string
   agent_instructions: string | null
   agent_scope: string | null
+  agent_use_emojis: boolean
   welcome_message: string | null
   created_at: string
 }
@@ -26,6 +27,7 @@ type CreateForm = {
   agent_tone: string
   agent_instructions: string
   agent_scope: string
+  agent_use_emojis: boolean
   welcome_message: string
 }
 
@@ -50,6 +52,7 @@ const BLANK_FORM: CreateForm = {
   agent_tone: 'profesional',
   agent_instructions: '',
   agent_scope: '',
+  agent_use_emojis: true,
   welcome_message: '',
 }
 
@@ -84,6 +87,7 @@ export function WidgetTokenManager() {
         agent_instructions: form.agent_instructions || null,
         agent_scope: form.agent_scope || null,
         welcome_message: form.welcome_message || null,
+        agent_use_emojis: form.agent_use_emojis,
       }),
     })
     setSaving(false)
@@ -102,6 +106,7 @@ export function WidgetTokenManager() {
       agent_tone: token.agent_tone ?? 'profesional',
       agent_instructions: token.agent_instructions ?? '',
       agent_scope: token.agent_scope ?? '',
+      agent_use_emojis: token.agent_use_emojis ?? true,
       welcome_message: token.welcome_message ?? '',
     })
   }
@@ -116,6 +121,7 @@ export function WidgetTokenManager() {
         ...editForm,
         agent_instructions: (editForm.agent_instructions as string) || null,
         agent_scope: (editForm.agent_scope as string) || null,
+        agent_use_emojis: editForm.agent_use_emojis ?? true,
         welcome_message: (editForm.welcome_message as string) || null,
       }),
     })
@@ -192,6 +198,13 @@ export function WidgetTokenManager() {
               </select>
             </div>
           </div>
+
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={form.agent_use_emojis}
+              onChange={e => setForm(p => ({ ...p, agent_use_emojis: e.target.checked }))}
+              className="w-4 h-4 rounded" />
+            <span className="text-sm text-gray-700">Permitir emojis en respuestas</span>
+          </label>
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -276,6 +289,13 @@ export function WidgetTokenManager() {
                     </select>
                   </div>
                 </div>
+
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" checked={(editForm.agent_use_emojis as boolean) ?? true}
+                    onChange={e => setEditForm(p => ({ ...p, agent_use_emojis: e.target.checked }))}
+                    className="w-4 h-4 rounded" />
+                  <span className="text-sm text-gray-700">Permitir emojis en respuestas</span>
+                </label>
 
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Misión e instrucciones</label>

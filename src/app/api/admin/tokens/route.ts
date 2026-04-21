@@ -11,10 +11,11 @@ const TokenSchema = z.object({
   agent_tone: z.string().max(30).optional(),
   agent_instructions: z.string().max(2000).optional().nullable(),
   agent_scope: z.string().max(1000).optional().nullable(),
+  agent_use_emojis: z.boolean().optional(),
   welcome_message: z.string().max(300).optional().nullable(),
 })
 
-const SELECT_FIELDS = 'id, token, label, allowed_origin, is_active, bot_name, bot_avatar_url, agent_language, agent_tone, agent_instructions, agent_scope, welcome_message, created_at'
+const SELECT_FIELDS = 'id, token, label, allowed_origin, is_active, bot_name, bot_avatar_url, agent_language, agent_tone, agent_instructions, agent_scope, agent_use_emojis, welcome_message, created_at'
 
 export async function GET() {
   try {
@@ -69,6 +70,7 @@ export async function PATCH(req: NextRequest) {
     if (rest.agent_tone) updates.agent_tone = rest.agent_tone
     if ('agent_instructions' in rest) updates.agent_instructions = rest.agent_instructions
     if ('agent_scope' in rest) updates.agent_scope = rest.agent_scope
+    if (typeof rest.agent_use_emojis === 'boolean') updates.agent_use_emojis = rest.agent_use_emojis
     if ('welcome_message' in rest) updates.welcome_message = rest.welcome_message
 
     const { error } = await supabase.from('widget_tokens').update(updates).eq('id', id)

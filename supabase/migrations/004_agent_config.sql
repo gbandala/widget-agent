@@ -9,3 +9,6 @@ ALTER TABLE widget_tokens
   ADD COLUMN IF NOT EXISTS agent_instructions TEXT,
   ADD COLUMN IF NOT EXISTS agent_scope        TEXT,
   ADD COLUMN IF NOT EXISTS welcome_message    TEXT;
+
+ALTER TABLE widget_tokens
+  ADD COLUMN IF NOT EXISTS agent_use_emojis BOOLEAN NOT NULL DEFAULT true;
