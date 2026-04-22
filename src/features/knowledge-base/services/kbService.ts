@@ -7,7 +7,7 @@ export const kbService = {
    * Busca entradas relevantes en la KB usando similitud vectorial.
    * tokenId: filtra por token + globales (NULL). Si omitido, devuelve todo (admin).
    */
-  async search(query: string, limit = 5, threshold = 0.65, tokenId?: string | null): Promise<KBSearchResult[]> {
+  async search(query: string, limit = 5, threshold = 0.45, tokenId?: string | null): Promise<KBSearchResult[]> {
     const supabase = await createServiceClient()
     const queryEmbedding = await generateEmbedding(query)
 

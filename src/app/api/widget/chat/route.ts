@@ -227,7 +227,7 @@ export async function POST(req: NextRequest) {
     // 4. RAG — buscar en KB
     let kbContext = ''
     if (userText.length > 5) {
-      const kbResults = await kbService.search(userText, 5, 0.65, tokenData.id)
+      const kbResults = await kbService.search(userText, 5, 0.45, tokenData.id)
       kbContext = kbService.formatForContext(kbResults)
     }
 

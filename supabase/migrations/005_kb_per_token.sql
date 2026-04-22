@@ -18,7 +18,7 @@ CREATE INDEX IF NOT EXISTS idx_kb_entries_token ON kb_entries(token_id);
 -- Reemplazar función search_kb con versión que filtra por token
 CREATE OR REPLACE FUNCTION search_kb(
   query_embedding VECTOR(1536),
-  match_threshold FLOAT DEFAULT 0.65,
+  match_threshold FLOAT DEFAULT 0.45,
   match_count INT DEFAULT 5,
   p_token_id UUID DEFAULT NULL
 )
