@@ -60,3 +60,4 @@ SKILLS_ROADMAP.md
 # Config duplicada (tailwind v4 usa postcss.config.mjs)
 postcss.config.js
 tailwind.config.ts
+.perf-reports/
