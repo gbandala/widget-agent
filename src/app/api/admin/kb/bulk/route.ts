@@ -8,10 +8,12 @@ const EntrySchema = z.object({
   content: z.string().min(10).max(10000),
   category: z.string().min(1).max(50),
   tags: z.array(z.string()).optional().default([]),
+  tokenId: z.string().uuid().nullable().optional(),
 })
 
 const BulkSchema = z.object({
   entries: z.array(EntrySchema).min(1).max(100),
+  tokenId: z.string().uuid().nullable().optional(),
 })
 
 const EMBED_BATCH = 10
@@ -24,7 +26,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Datos inválidos', detail: parsed.error.flatten() }, { status: 400 })
     }
 
-    const { entries } = parsed.data
+    const { entries, tokenId: bulkTokenId } = parsed.data
     const supabase = await createServiceClient()
 
     // Generate embeddings in batches of EMBED_BATCH
@@ -44,6 +46,8 @@ export async function POST(req: NextRequest) {
       tags: e.tags,
       embedding: allEmbeddings[i],
       is_active: true,
+      // Entry-level tokenId overrides bulk-level; both fall back to null (global)
+      token_id: e.tokenId ?? bulkTokenId ?? null,
     }))
 
     const { error } = await supabase.from('kb_entries').insert(rows)

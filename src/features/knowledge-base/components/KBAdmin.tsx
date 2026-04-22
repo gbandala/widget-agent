@@ -5,6 +5,11 @@ import type { KBEntry } from '../types'
 import { SUGGESTED_CATEGORIES } from '../types'
 import { ImportWizard } from './ImportWizard'
 
+interface TokenOption {
+  id: string
+  label: string
+}
+
 interface PendingQuestion {
   id: string
   question: string
@@ -24,16 +29,19 @@ function EntryForm({
   onSave,
   onCancel,
   existingCategories = [],
+  tokens = [],
 }: {
   initial?: Partial<KBEntry>
   onSave: (data: Partial<KBEntry>) => void
   onCancel: () => void
   existingCategories?: string[]
+  tokens?: TokenOption[]
 }) {
   const [title, setTitle] = useState(initial?.title ?? '')
   const [content, setContent] = useState(initial?.content ?? '')
   const [category, setCategory] = useState(initial?.category ?? 'service')
   const [tags, setTags] = useState((initial?.tags ?? []).join(', '))
+  const [tokenId, setTokenId] = useState<string | null>(initial?.tokenId ?? null)
 
   const categorySuggestions = [
     ...SUGGESTED_CATEGORIES,
@@ -51,6 +59,7 @@ function EntryForm({
       content,
       category,
       tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+      tokenId,
     })
     setSaving(false)
   }
@@ -104,6 +113,23 @@ function EntryForm({
           />
         </div>
       </div>
+      {tokens.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Asignar a token <span className="text-gray-400 font-normal">(vacío = global, visible a todos)</span>
+          </label>
+          <select
+            value={tokenId ?? ''}
+            onChange={e => setTokenId(e.target.value || null)}
+            className="w-full border rounded-lg px-3 py-2 text-sm text-gray-900 bg-white"
+          >
+            <option value="">Global (todos los tokens)</option>
+            {tokens.map(t => (
+              <option key={t.id} value={t.id}>{t.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="flex gap-2 justify-end">
         <button type="button" onClick={onCancel} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">
           Cancelar
@@ -292,11 +318,14 @@ export function KBAdmin() {
   const [tab, setTab] = useState<'kb' | 'pending' | 'import'>('kb')
   const [stats, setStats] = useState<KBStats>({ entryCount: 0, totalChars: 0 })
   const [pendingCount, setPendingCount] = useState(0)
+  const [tokens, setTokens] = useState<TokenOption[]>([])
+  const [filterTokenId, setFilterTokenId] = useState<string>('')
 
   const load = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/admin/kb')
+      const url = filterTokenId ? `/api/admin/kb?token_id=${filterTokenId}` : '/api/admin/kb'
+      const res = await fetch(url)
       const { entries: e } = await res.json()
       const list: KBEntry[] = e ?? []
       setEntries(list)
@@ -311,6 +340,16 @@ export function KBAdmin() {
     }
   }
 
+  const loadTokens = async () => {
+    try {
+      const res = await fetch('/api/admin/tokens')
+      const { tokens: t } = await res.json()
+      setTokens((t ?? []).map((tok: { id: string; label: string }) => ({ id: tok.id, label: tok.label })))
+    } catch {
+      // tokens no críticos para la KB
+    }
+  }
+
   const loadPendingCount = async () => {
     const res = await fetch('/api/admin/kb-pending')
     const { questions } = await res.json()
@@ -320,13 +359,17 @@ export function KBAdmin() {
   useEffect(() => {
     load()
     loadPendingCount()
+    loadTokens()
   }, [])
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load() }, [filterTokenId]) // re-fetch when filter changes
 
   const handleCreate = async (data: Partial<KBEntry>) => {
     const res = await fetch('/api/admin/kb', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...data, tokenId: data.tokenId ?? null }),
     })
     if (res.ok) {
       setCreating(false)
@@ -375,10 +418,22 @@ export function KBAdmin() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Base de Conocimiento</h1>
-          <p className="text-sm text-gray-500 mt-1">{entries.length} entradas totales</p>
+          <p className="text-sm text-gray-500 mt-1">{entries.length} entradas {filterTokenId ? 'filtradas' : 'totales'}</p>
         </div>
         {tab === 'kb' && (
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {tokens.length > 0 && (
+              <select
+                value={filterTokenId}
+                onChange={e => setFilterTokenId(e.target.value)}
+                className="text-sm border rounded-lg px-3 py-2 text-gray-700 bg-white"
+              >
+                <option value="">Todos los tokens</option>
+                {tokens.map(t => (
+                  <option key={t.id} value={t.id}>{t.label}</option>
+                ))}
+              </select>
+            )}
             <button
               onClick={() => setTab('import')}
               className="px-4 py-2 border text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
@@ -446,6 +501,7 @@ export function KBAdmin() {
               onSave={handleCreate}
               onCancel={() => setCreating(false)}
               existingCategories={[...new Set(entries.map(e => e.category))]}
+              tokens={tokens}
             />
           )}
 
@@ -457,6 +513,7 @@ export function KBAdmin() {
                   onSave={data => handleUpdate(entry.id, data)}
                   onCancel={() => setEditing(null)}
                   existingCategories={[...new Set(entries.map(e => e.category))]}
+                  tokens={tokens}
                 />
               ) : (
                 <>
@@ -466,6 +523,13 @@ export function KBAdmin() {
                         <span className="text-xs font-medium px-2 py-0.5 bg-blue-50 text-blue-700 rounded">
                           {SUGGESTED_CATEGORIES.find(c => c.value === entry.category)?.label ?? entry.category}
                         </span>
+                        {entry.tokenId ? (
+                          <span className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 rounded">
+                            {tokens.find(t => t.id === entry.tokenId)?.label ?? 'Token privado'}
+                          </span>
+                        ) : (
+                          <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded">Global</span>
+                        )}
                         {!entry.isActive && (
                           <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded">Inactiva</span>
                         )}
@@ -524,6 +588,7 @@ export function KBAdmin() {
       {tab === 'import' && (
         <ImportWizard
           existingCategories={[...new Set(entries.map(e => e.category))]}
+          tokens={tokens}
           onImported={(count) => {
             setTab('kb')
             load()

@@ -7,13 +7,15 @@ const KBEntrySchema = z.object({
   content: z.string().min(10).max(10000),
   category: z.string().min(1).max(50),
   tags: z.array(z.string()).optional(),
+  tokenId: z.string().uuid().nullable().optional(),
 })
 
 const INTERNAL_ERROR = { error: 'Error interno del servidor' }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const entries = await kbService.list()
+    const tokenId = new URL(req.url).searchParams.get('token_id') ?? undefined
+    const entries = await kbService.list(tokenId)
     return NextResponse.json({ entries })
   } catch (err) {
     console.error('[KB GET]', err)

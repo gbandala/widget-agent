@@ -6,8 +6,14 @@ import type { ProposedEntry } from '@/app/api/admin/kb/structure/route'
 
 type Step = 'upload' | 'processing' | 'review'
 
+interface TokenOption {
+  id: string
+  label: string
+}
+
 interface ImportWizardProps {
   existingCategories: string[]
+  tokens?: TokenOption[]
   onImported: (count: number) => void
   onClose: () => void
 }
@@ -174,7 +180,7 @@ function EntryCard({
   )
 }
 
-export function ImportWizard({ existingCategories, onImported, onClose }: ImportWizardProps) {
+export function ImportWizard({ existingCategories, tokens = [], onImported, onClose }: ImportWizardProps) {
   const [step, setStep] = useState<Step>('upload')
   const [dragging, setDragging] = useState(false)
   const [file, setFile] = useState<File | null>(null)
@@ -183,6 +189,7 @@ export function ImportWizard({ existingCategories, onImported, onClose }: Import
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [importTokenId, setImportTokenId] = useState<string>('')
   const fileRef = useRef<HTMLInputElement>(null)
   const msgInterval = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -262,6 +269,7 @@ export function ImportWizard({ existingCategories, onImported, onClose }: Import
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          tokenId: importTokenId || null,
           entries: toImport.map(e => ({
             title: e.title,
             content: e.content,
@@ -403,10 +411,24 @@ export function ImportWizard({ existingCategories, onImported, onClose }: Import
             ))}
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t">
-            <p className="text-sm text-gray-500">
-              {selected.size === 0 && 'Selecciona al menos una entrada para importar'}
-            </p>
+          <div className="flex items-center justify-between gap-4 pt-2 border-t">
+            <div className="flex items-center gap-3">
+              {tokens.length > 0 && (
+                <select
+                  value={importTokenId}
+                  onChange={e => setImportTokenId(e.target.value)}
+                  className="text-sm border rounded-lg px-3 py-2 text-gray-700 bg-white"
+                >
+                  <option value="">Global (todos los tokens)</option>
+                  {tokens.map(t => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))}
+                </select>
+              )}
+              {selected.size === 0 && (
+                <p className="text-sm text-gray-500">Selecciona al menos una entrada</p>
+              )}
+            </div>
             <button
               onClick={handleImport}
               disabled={selected.size === 0 || importing}

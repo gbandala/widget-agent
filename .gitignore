@@ -61,3 +61,6 @@ SKILLS_ROADMAP.md
 postcss.config.js
 tailwind.config.ts
 .perf-reports/
+
+# Análisis internos (no parte del código)
+docs/

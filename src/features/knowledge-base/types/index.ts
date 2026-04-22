@@ -15,11 +15,12 @@ export interface KBEntry {
   category: KBCategory
   tags: string[]
   isActive: boolean
+  tokenId: string | null
   createdAt: string
   updatedAt: string
 }
 
-export interface KBSearchResult extends Omit<KBEntry, 'isActive' | 'createdAt' | 'updatedAt'> {
+export interface KBSearchResult extends Omit<KBEntry, 'isActive' | 'createdAt' | 'updatedAt' | 'tokenId'> {
   similarity: number
 }
 
@@ -28,4 +29,5 @@ export interface KBEntryInput {
   content: string
   category: KBCategory
   tags?: string[]
+  tokenId?: string | null
 }
