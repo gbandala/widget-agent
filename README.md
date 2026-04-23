@@ -17,7 +17,7 @@ Asistente de ventas con IA, embebible en cualquier landing page. Arquitectura **
 | **Resumen descargable** | Genera resumen de la conversación al final |
 | **Personalidad por token** | Cada token tiene: idioma, tono, instrucciones, scope, welcome message, emojis on/off |
 | **Panel admin** | CRUD de KB, gestión de leads, tokens, logs de errores |
-| **Seguridad** | Rate limiting Upstash, prompt injection guard, PII filter, scope guard, SSRF protection |
+| **Seguridad** | Rate limiting Upstash, gibberish guard, velocity guard por sesión, prompt injection guard, PII filter, scope guard, SSRF protection |
 
 ---
 
@@ -53,6 +53,7 @@ Landing Page (cualquier sitio)
 
 ```
 Request → Rate limit IP → Token validation (60s cache) → Rate limit token
+        → Gibberish guard → Velocity guard (por sesión, min 1s)
         → Prompt injection guard → Scope guard → RAG search (KB scoped al token)
         → Landing HTML (cache sesión) → streamText (OpenRouter)
         → PII filter output → widget_messages
@@ -126,10 +127,11 @@ Levanta un servidor en `localhost:3001/callback`, abre el navegador para autoriz
 ## Desarrollo local
 
 ```bash
-pnpm dev        # http://localhost:3000 (Turbopack)
-pnpm build      # Build de producción + typecheck
-pnpm lint       # ESLint
-pnpm setup      # Wizard de primer deploy
+pnpm dev          # http://localhost:3000 (Turbopack)
+pnpm build        # Compila widget.js + build de producción Next.js + typecheck
+pnpm build:widget # Solo compila public/widget.js desde src/widget/loader.ts
+pnpm lint         # ESLint
+pnpm setup        # Wizard de primer deploy
 ```
 
 > En Windows con unidades USB/junction-points, usar `pnpm exec next dev` si Turbopack falla.
@@ -190,7 +192,42 @@ Panel admin `/kb` → tab "Importar":
 
 ## Integración en landing page
 
-### Iframe (recomendado para sitios no-React)
+### Script tag (recomendado — cualquier sitio)
+
+```html
+<script
+  src="https://TU_DOMINIO/widget.js"
+  data-token="TU_WIDGET_TOKEN"
+  data-bot-name="Sofia"
+  data-color="#2563eb"
+  data-position="bottom-right"
+></script>
+```
+
+Crea automáticamente el FAB + iframe. El iframe precarga en background (`requestIdleCallback`) para abrirse sin latencia al primer click. En mobile (< 640 px) el widget ocupa pantalla completa.
+
+| Atributo | Default | Descripción |
+|----------|---------|-------------|
+| `data-token` | **requerido** | Token del widget |
+| `data-bot-name` | `Asistente` | Nombre del bot |
+| `data-welcome-message` | — | Mensaje de bienvenida |
+| `data-avatar-url` | — | URL del avatar |
+| `data-color` | `#2563eb` | Color del FAB (hex) |
+| `data-position` | `bottom-right` | `bottom-right` \| `bottom-left` |
+
+También acepta `window.widgetConfig = { token, botName, color, ... }` antes del script tag.
+
+`widget.js` sirve con `Cache-Control: no-cache, must-revalidate` — los consumidores siempre reciben la versión más reciente sin cambiar su script tag.
+
+### Componente React (mismo proyecto)
+
+```tsx
+import { WidgetLauncher } from './WidgetLauncher'
+
+<WidgetLauncher token="TU_WIDGET_TOKEN" />
+```
+
+### Iframe directo
 
 ```html
 <iframe
@@ -199,16 +236,6 @@ Panel admin `/kb` → tab "Importar":
   allow="microphone"
 ></iframe>
 ```
-
-### Componente React
-
-```tsx
-import { WidgetLauncher } from './WidgetLauncher'
-
-<WidgetLauncher token="TU_WIDGET_TOKEN" />
-```
-
-El `welcome_message`, `bot_name` y `bot_avatar_url` se leen desde la BD — no hace falta pasarlos como props.
 
 ---
 
@@ -255,14 +282,21 @@ Requiere header `x-admin-key: TU_ADMIN_SECRET_KEY`. Usar [ModHeader](https://mod
 
 ```
 Request → Proxy (admin guard) → Token validator → Rate limit IP
-        → Rate limit token → Prompt injection → Scope guard
+        → Rate limit token → Gibberish guard → Velocity guard (sesión)
+        → Prompt injection → Scope guard
         → RAG (scoped) → LLM → PII output filter → Response
 ```
 
-- PII cifrado AES-256-CBC en `widget_leads`
-- Rate limiting via Upstash Redis (IP + token)
-- SSRF protection: bloquea localhost, rangos privados, AWS metadata
-- Prompt injection guard en cada mensaje
+| Guard | Descripción |
+|-------|-------------|
+| **Gibberish guard** | Heurística server-side sin costo de tokens: detecta mensajes < 2 chars, sin letras, char repetido > 65%, 5+ chars idénticos consecutivos. Casos sutiles (`"miau"`, `"xd"`) manejados por instrucción en system prompt |
+| **Velocity guard** | Mínimo 1 segundo entre mensajes por sesión — imposible para un humano, trivial para un bot. In-memory con upgrade natural a Redis |
+| **Rate limit** | IP: 20 req/min · Token: 200 req/hora via Upstash Redis (in-memory fallback en dev) |
+| **Prompt injection** | Regex patterns: `ignore instructions`, `jailbreak`, `new role`, `<<<...>>>`, etc. |
+| **Scope guard** | Bloques universales (violencia, ataques) — scope de negocio se maneja en system prompt |
+| **PII filter** | Redacta emails, teléfonos y tarjetas en respuestas del bot antes de guardar |
+| **SSRF protection** | Bloquea localhost, rangos privados (10.x, 172.16.x, 192.168.x), AWS metadata |
+| **AES-256-CBC** | Campos `email` y `phone` en `widget_leads` cifrados en reposo |
 
 ---
 
@@ -283,7 +317,6 @@ Mínimo requerido para producción:
 
 ## Roadmap
 
-- [ ] Bundle standalone `widget.js` para integración con `<script>`
 - [ ] TTS — respuesta en audio
 - [ ] Dashboard de analytics
 - [ ] Exportación de leads a CSV

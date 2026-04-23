@@ -19,6 +19,13 @@ const nextConfig: NextConfig = {
           { key: 'X-Frame-Options', value: 'ALLOWALL' },
         ],
       },
+      {
+        // Always revalidate widget.js so consumers get updates without cache busting in their script tag
+        source: '/widget.js',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, must-revalidate' },
+        ],
+      },
     ]
   },
 }

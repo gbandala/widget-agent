@@ -88,6 +88,22 @@ async function getUpstashLimiters() {
   return { perIP: upstashPerIP, perToken: upstashPerToken }
 }
 
+// ---- Per-session velocity guard (in-memory) ----
+// Blocks machine-speed submissions: a human can't type and send in under 1 second.
+
+const velocityStore = new Map<string, number>()
+const VELOCITY_MIN_MS = 1000
+
+export function checkMessageVelocity(sessionId: string): { allowed: boolean } {
+  const now = Date.now()
+  const last = velocityStore.get(sessionId)
+  velocityStore.set(sessionId, now)
+  if (last !== undefined && now - last < VELOCITY_MIN_MS) {
+    return { allowed: false }
+  }
+  return { allowed: true }
+}
+
 // ---- Public API ----
 
 export type RateLimitType = 'ip' | 'token'

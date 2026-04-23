@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "tsx scripts/build-widget.ts && next build",
+    "build:widget": "tsx scripts/build-widget.ts",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next build",
@@ -44,6 +45,7 @@
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "^0.28.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
     "playwright": "^1.59.1",

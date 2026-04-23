@@ -284,7 +284,7 @@ export function WidgetLauncher({
               />
               <button
                 type="submit"
-                disabled={isLoading || !input.trim() || !sessionReady}
+                disabled={isLoading || input.trim().length < 2 || !sessionReady}
                 className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center disabled:opacity-40 hover:bg-blue-700 transition-colors flex-shrink-0"
                 aria-label="Enviar"
               >

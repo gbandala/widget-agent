@@ -6,8 +6,9 @@ import { kbService } from '@/features/knowledge-base/services/kbService'
 import { readLanding, formatLandingForContext } from '@/lib/landing-reader/landingReader'
 import { checkScope, SCOPE_DECLINE_MESSAGE } from '@/lib/security/scopeGuard'
 import { checkPromptInjection, INJECTION_BLOCKED_MESSAGE } from '@/lib/security/promptGuard'
+import { checkGibberish, GIBBERISH_RESPONSE } from '@/lib/security/gibberishGuard'
 import { filterPII } from '@/lib/security/piiFilter'
-import { checkRateLimit } from '@/lib/security/rateLimiter'
+import { checkRateLimit, checkMessageVelocity } from '@/lib/security/rateLimiter'
 import { createServiceClient } from '@/lib/supabase/server'
 
 // ---- Token validation cache (60s TTL) ----
@@ -148,6 +149,9 @@ REGLAS DE PRIVACIDAD:
 - Los datos capturados del usuario son confidenciales
 - No menciones costos exactos sin antes ofrecer una sesión de descubrimiento
 
+MENSAJES SIN SENTIDO:
+- Si el mensaje no tiene sentido o es gibberish (ej: "miau", "gogodada", "xd", sonidos, palabras inventadas), responde únicamente: "¿Tienes alguna pregunta? Con gusto te ayudo." — sin más.
+
 SEÑALES DE INTERÉS GENUINO (activa captureContact):
 - Preguntas sobre precios, proceso de trabajo, tiempos
 - "me interesa", "quiero empezar", "quiero una propuesta", "cómo los contrato"
@@ -203,7 +207,21 @@ export async function POST(req: NextRequest) {
   const lastUserMessage = messages.findLast(m => m.role === 'user')
   const userText = lastUserMessage?.parts?.find(p => p.type === 'text')?.text ?? ''
 
-  // 2. Prompt injection check
+  // 2. Gibberish check (heuristic — no AI call, no token cost)
+  const gibberishCheck = checkGibberish(userText)
+  if (gibberishCheck.isGibberish) {
+    return NextResponse.json({ type: 'text', text: GIBBERISH_RESPONSE })
+  }
+
+  // 3. Session velocity check — blocks machine-speed submissions (< 1s between messages)
+  if (sessionId) {
+    const velocityCheck = checkMessageVelocity(sessionId)
+    if (!velocityCheck.allowed) {
+      return NextResponse.json({ type: 'text', text: GIBBERISH_RESPONSE })
+    }
+  }
+
+  // 4. Prompt injection check
   const injectionCheck = checkPromptInjection(userText)
   if (!injectionCheck.safe) {
     await logError(supabase, 'injection_attempt', tokenData.id, sessionId ?? null, userText.slice(0, 200), sourceUrl, ipHash)
@@ -213,7 +231,7 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // 3. Scope check
+  // 5. Scope check
   const scopeCheck = checkScope(userText)
   if (!scopeCheck.allowed) {
     await logError(supabase, 'scope_violation', tokenData.id, sessionId ?? null, userText.slice(0, 200), sourceUrl, ipHash)

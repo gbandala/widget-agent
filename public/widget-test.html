@@ -10,25 +10,45 @@
     p { color: #64748b; line-height: 1.6; }
     .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin: 24px 0; }
     code { background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 0.875rem; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-size: 0.875rem; }
+    th { background: #f1f5f9; font-weight: 600; }
   </style>
 </head>
 <body>
   <h1>Página de prueba — Widget embed (LOCAL)</h1>
   <p>
-    Esta página simula un sitio externo que embebe el widget via <code>widget.js</code>.<br/>
+    Simula un sitio externo que embebe el widget via <code>widget.js</code>.<br/>
     Usa el token DEV (<code>allowed_origin: http://localhost:3000</code>).<br/>
-    El botón azul aparece abajo a la derecha.
+    El botón aparece abajo a la derecha. El iframe carga en segundo plano (<code>requestIdleCallback</code>) para abrirse instantáneo al primer click.
   </p>
 
   <div class="card">
-    <strong>Modo script tag (widget.js)</strong><br/><br/>
-    El widget se carga con el token DEV de <code>NEXT_PUBLIC_DEMO_WIDGET_TOKEN</code>.<br/>
-    Fuente del iframe: <code>http://localhost:3000/embed</code>
+    <strong>Atributos disponibles en <code>&lt;script data-*&gt;</code></strong>
+    <table>
+      <tr><th>Atributo</th><th>Valor por defecto</th><th>Descripción</th></tr>
+      <tr><td><code>data-token</code></td><td><em>requerido</em></td><td>Token del widget</td></tr>
+      <tr><td><code>data-bot-name</code></td><td><code>Asistente</code></td><td>Nombre del bot en el header</td></tr>
+      <tr><td><code>data-welcome-message</code></td><td>—</td><td>Mensaje de bienvenida inicial</td></tr>
+      <tr><td><code>data-avatar-url</code></td><td>—</td><td>URL del avatar del bot</td></tr>
+      <tr><td><code>data-color</code></td><td><code>#2563eb</code></td><td>Color principal del FAB (hex)</td></tr>
+      <tr><td><code>data-position</code></td><td><code>bottom-right</code></td><td><code>bottom-right</code> | <code>bottom-left</code></td></tr>
+    </table>
+    <br/>
+    También aceptado como <code>window.widgetConfig = { token, botName, color, ... }</code> antes del script tag.
+  </div>
+
+  <div class="card">
+    <strong>Control programático (postMessage)</strong><br/><br/>
+    <code>window.frames[0].contentWindow.postMessage({ type: 'widget-open' }, '*')</code><br/>
+    — desde el host, o desde el iframe hacia el host para cerrar.
+    <br/><br/>
+    <strong>Teclado:</strong> <code>ESC</code> cierra el widget cuando está abierto.
   </div>
 
   <p style="color:#94a3b8;font-size:0.8rem;margin-top:40px;">
-    Para probar con el token de producción (clariifica.com), reemplaza <code>data-token</code>
-    con el valor de <code>WIDGET_TOKEN_PROD</code> en .env.local <em>y</em> accede desde el dominio autorizado.
+    Para probar con el token de producción, reemplaza <code>data-token</code> con el valor correspondiente
+    <em>y</em> accede desde el dominio autorizado (<code>allowed_origin</code>).
   </p>
 
   <!-- Token DEV: allowed_origin http://localhost:3000 -->
@@ -37,6 +57,8 @@
     data-token="b39146f09a292da7a43645931918496fe3b28de787a8f7fb3119cf0a07464ec8"
     data-bot-name="Sofia"
     data-welcome-message="¡Hola! Soy Sofia, asistente de prueba local. ¿En qué puedo ayudarte?"
+    data-color="#2563eb"
+    data-position="bottom-right"
   ></script>
 </body>
 </html>

@@ -5,11 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-pnpm dev        # Dev server at http://localhost:3000
-pnpm build      # Production build (also runs type checking)
-pnpm typecheck  # Alias for build — runs tsc/next build
-pnpm lint       # ESLint
-pnpm setup      # Interactive CLI: creates DB tables, first widget token, loads KB seed
+pnpm dev          # Dev server at http://localhost:3000
+pnpm build        # Compiles widget.js + Next.js production build (type checking)
+pnpm build:widget # Only compiles public/widget.js from src/widget/loader.ts (esbuild)
+pnpm typecheck    # Alias for build — runs tsc/next build
+pnpm lint         # ESLint
+pnpm setup        # Interactive CLI: creates DB tables, first widget token, loads KB seed
 ```
 
 > Local dev on Windows: `pnpm dev` uses Turbopack by default. If it fails on USB/junction-point drives use `pnpm exec next dev` instead.
@@ -28,12 +29,14 @@ Landing Page
       1. Rate limit by IP hash
       2. Token validation (60s in-memory cache, checks is_active + allowed_origin)
       3. Rate limit by token
-      4. Prompt injection guard
-      5. Scope guard (off-topic → polite decline)
-      6. RAG search against kb_entries (pgvector cosine similarity)
-      7. Landing HTML read/cache in widget_sessions.landing_content
-      8. streamText via OpenRouter (AI SDK v6)
-      9. PII filter on output before saving to widget_messages
+      4. Gibberish guard (heuristic, no AI cost — too short, no alpha, char repetition)
+      5. Velocity guard (per session, min 1s between messages — blocks bots)
+      6. Prompt injection guard
+      7. Scope guard (off-topic → polite decline)
+      8. RAG search against kb_entries (pgvector cosine similarity)
+      9. Landing HTML read/cache in widget_sessions.landing_content
+     10. streamText via OpenRouter (AI SDK v6)
+     11. PII filter on output before saving to widget_messages
 ```
 
 ### Key abstractions
@@ -138,7 +141,21 @@ Routes `/kb`, `/tokens`, `/leads`, `/logs` require `x-admin-key: <ADMIN_SECRET_K
 
 ### Embedding integration
 
-The widget is a React component (`src/features/widget/`) consumed from the same Next.js app. `NEXT_PUBLIC_DEMO_WIDGET_TOKEN` powers the demo on `/`. For external sites, the current options are iframe or copying the React component — the standalone `widget.js` bundle is on the roadmap.
+The widget is a React component (`src/features/widget/`) consumed from the same Next.js app. `NEXT_PUBLIC_DEMO_WIDGET_TOKEN` powers the demo on `/`.
+
+For external sites, the recommended integration is the **`widget.js` script tag**:
+
+```html
+<script src="https://TU_DOMINIO/widget.js" data-token="..." data-color="#2563eb"></script>
+```
+
+**How it works:** `public/widget.js` is a compiled IIFE loader (esbuild, 4.6 KB minified) that injects a FAB button and an iframe pointing to `/embed`. The iframe preloads via `requestIdleCallback` after page load, so first-click latency is near zero.
+
+**Source:** `src/widget/loader.ts` — edit here, then run `pnpm build:widget` to compile.
+
+**Features:** lazy iframe, mobile full-screen (< 640 px), configurable color + position, ESC key, `aria-expanded`, postMessage API (`widget-open` / `widget-close`).
+
+**Cache:** `next.config.ts` serves `/widget.js` with `Cache-Control: no-cache, must-revalidate` — consumers always get the latest version without changing their script tag.
 
 ## Environment variables
 
