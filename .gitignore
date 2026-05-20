@@ -64,3 +64,6 @@ tailwind.config.ts
 
 # Análisis internos (no parte del código)
 docs/
+
+# Plan de deploy local (instrucciones con credenciales, no subir)
+DEPLOY-VPS.md
