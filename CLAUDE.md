@@ -11,7 +11,22 @@ pnpm build:widget # Only compiles public/widget.js from src/widget/loader.ts (es
 pnpm typecheck    # Alias for build — runs tsc/next build
 pnpm lint         # ESLint
 pnpm setup        # Interactive CLI: creates DB tables, first widget token, loads KB seed
+
+pnpm test:unit    # Unit tests — 4 security guards, no network, <1s (tests/unit/guards.test.ts)
+pnpm test:api     # API integration tests against widget.clariifica.com (tests/api/widget-scenarios.test.ts)
+pnpm test         # Both suites in sequence
 ```
+
+### Test requirements
+
+`pnpm test:unit` — no dependencies, runs offline.
+
+`pnpm test:api` — requires `.env.local` with:
+```
+WIDGET_TEST_TOKEN=<token con allowed_origin=clariifica.com>
+WIDGET_TEST_ORIGIN=clariifica.com
+```
+The full conversation flow is: `POST /api/admin/tokens/validate` → `POST /api/widget/session` → `POST /api/widget/chat`. Calling `/api/widget/chat` directly with an invented `sessionId` silently fails to persist (no row exists to `update`).
 
 > Local dev on Windows: `pnpm dev` uses Turbopack by default. If it fails on USB/junction-point drives use `pnpm exec next dev` instead.
 
