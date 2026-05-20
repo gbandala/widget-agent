@@ -1,4 +1,4 @@
-name: Build & Push Docker Image
+name: Build & Deploy
 
 on:
   push:
@@ -8,7 +8,7 @@ env:
   IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -40,3 +40,27 @@ jobs:
             NEXT_PUBLIC_DEMO_WIDGET_TOKEN=${{ secrets.NEXT_PUBLIC_DEMO_WIDGET_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            docker pull ghcr.io/${{ github.repository }}:latest
+            docker stop widget-agent 2>/dev/null || true
+            docker rm   widget-agent 2>/dev/null || true
+            docker run -d \
+              --name widget-agent \
+              --restart unless-stopped \
+              --network dokploy-network \
+              -e NODE_ENV=production \
+              -e PORT=3000 \
+              --label "traefik.enable=true" \
+              --label "traefik.http.routers.widget-agent.rule=Host(\`widget.clariifica.com\`)" \
+              --label "traefik.http.routers.widget-agent.entrypoints=websecure" \
+              --label "traefik.http.routers.widget-agent.tls.certresolver=letsencrypt" \
+              --label "traefik.http.services.widget-agent.loadbalancer.server.port=3000" \
+              --env-file /etc/widget-agent.env \
+              ghcr.io/${{ github.repository }}:latest
