@@ -1,5 +1,7 @@
 import { createServiceClient } from '@/lib/supabase/server'
 
+export const dynamic = 'force-dynamic'
+
 const ERROR_TYPE_LABELS: Record<string, string> = {
   api_error: 'Error de API',
   quota_exceeded: 'Cuota Agotada',
