@@ -29,7 +29,7 @@ function loadEnv() {
 loadEnv()
 
 const BASE_URL = process.env.WIDGET_BASE_URL ?? 'https://widget.clariifica.com'
-const TOKEN    = process.env.NEXT_PUBLIC_DEMO_WIDGET_TOKEN ?? process.env.WIDGET_TEST_TOKEN ?? ''
+const TOKEN    = process.env.WIDGET_TEST_TOKEN ?? process.env.NEXT_PUBLIC_DEMO_WIDGET_TOKEN ?? ''
 const ORIGIN   = process.env.WIDGET_TEST_ORIGIN ?? 'widget.clariifica.com'
 
 function makeMessage(text: string) {
