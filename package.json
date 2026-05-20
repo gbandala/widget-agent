@@ -10,7 +10,10 @@
     "lint": "eslint",
     "typecheck": "next build",
     "setup": "tsx scripts/setup.ts",
-    "perf": "tsx scripts/perf-bench.ts"
+    "perf": "tsx scripts/perf-bench.ts",
+    "test:unit": "tsx --test tests/unit/guards.test.ts",
+    "test:api": "tsx --test tests/api/widget-scenarios.test.ts",
+    "test": "tsx --test tests/unit/guards.test.ts && tsx --test tests/api/widget-scenarios.test.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "3.0.53",
