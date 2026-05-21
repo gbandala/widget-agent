@@ -32,7 +32,7 @@ const BASE_URL = process.env.WIDGET_BASE_URL ?? 'https://widget.clariifica.com'
 const TOKEN    = process.env.WIDGET_TEST_TOKEN ?? process.env.NEXT_PUBLIC_DEMO_WIDGET_TOKEN ?? ''
 const ORIGIN   = process.env.WIDGET_TEST_ORIGIN ?? 'widget.clariifica.com'
 
-function makeMessage(text: string) {
+function makeMessage(text: string, sessionId: string) {
   return {
     messages: [{
       id: crypto.randomUUID(),
@@ -40,12 +40,47 @@ function makeMessage(text: string) {
       parts: [{ type: 'text', text }],
       createdAt: new Date().toISOString(),
     }],
-    sessionId: crypto.randomUUID(),
+    sessionId,
     sourceUrl: `https://${ORIGIN}`,
   }
 }
 
-async function chat(text: string, overrideToken = TOKEN, overrideOrigin = ORIGIN) {
+/** Crea una sesión real en Supabase — necesario para que los mensajes persistan */
+async function createSession(): Promise<string> {
+  const anonId = crypto.randomUUID()
+
+  // 1. Obtener tokenId
+  const validateRes = await fetch(`${BASE_URL}/api/admin/tokens/validate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Origin': `https://${ORIGIN}`,
+      'x-source-origin': `https://${ORIGIN}`,
+    },
+    body: JSON.stringify({ token: TOKEN }),
+  })
+  const { tokenId } = await validateRes.json()
+  if (!tokenId) throw new Error('No se pudo validar el token para crear sesión')
+
+  // 2. Crear sesión
+  const sessionRes = await fetch(`${BASE_URL}/api/widget/session`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${TOKEN}`,
+      'Origin': `https://${ORIGIN}`,
+      'x-source-origin': `https://${ORIGIN}`,
+      'x-anon-id': anonId,
+    },
+    body: JSON.stringify({ anonId, tokenId, sourceUrl: `https://${ORIGIN}` }),
+  })
+  const { session } = await sessionRes.json()
+  if (!session?.id) throw new Error('No se pudo crear la sesión')
+  return session.id
+}
+
+async function chat(text: string, overrideToken = TOKEN, overrideOrigin = ORIGIN, sessionId?: string) {
+  const sid = sessionId ?? crypto.randomUUID()
   const res = await fetch(`${BASE_URL}/api/widget/chat`, {
     method: 'POST',
     headers: {
@@ -55,7 +90,7 @@ async function chat(text: string, overrideToken = TOKEN, overrideOrigin = ORIGIN
       'x-source-origin': `https://${overrideOrigin}`,
       'x-anon-id': crypto.randomUUID(),
     },
-    body: JSON.stringify(makeMessage(text)),
+    body: JSON.stringify(makeMessage(text, sid)),
   })
   return res
 }
@@ -69,28 +104,34 @@ before(() => {
 })
 
 // ─────────────────────────────────────────────
-// HAPPY PATH
+// HAPPY PATH — usa sesión real para que persista en el dashboard
 // ─────────────────────────────────────────────
 describe('Happy Path — mensajes válidos', () => {
+  let sessionId: string
+
+  before(async () => {
+    sessionId = await createSession()
+  })
 
   test('saludo básico devuelve respuesta 200', async () => {
-    const res = await chat('Hola, ¿cómo están?')
+    const res = await chat('Hola, ¿cómo están?', TOKEN, ORIGIN, sessionId)
     assert.equal(res.status, 200)
   })
 
   test('pregunta de negocio devuelve respuesta 200', async () => {
-    const res = await chat('¿Qué servicios ofrecen?')
+    const res = await chat('¿Qué servicios ofrecen?', TOKEN, ORIGIN, sessionId)
     assert.equal(res.status, 200)
   })
 
   test('pregunta sobre precios devuelve respuesta 200', async () => {
-    const res = await chat('¿Cuánto cuesta una automatización?')
+    const res = await chat('¿Cuánto cuesta una automatización?', TOKEN, ORIGIN, sessionId)
     assert.equal(res.status, 200)
   })
 
   test('pregunta larga y detallada devuelve 200', async () => {
     const res = await chat(
-      'Tengo una empresa de logística con 50 empleados y quiero automatizar el proceso de facturación y seguimiento de pedidos. ¿Pueden ayudarme con eso?'
+      'Tengo una empresa de logística con 50 empleados y quiero automatizar el proceso de facturación y seguimiento de pedidos. ¿Pueden ayudarme con eso?',
+      TOKEN, ORIGIN, sessionId
     )
     assert.equal(res.status, 200)
   })

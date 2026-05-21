@@ -4,6 +4,16 @@ import { createServiceClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
+const TZ = 'America/Mexico_City'
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleString('es-MX', { timeZone: TZ, dateStyle: 'short', timeStyle: 'short' })
+}
+
+function fmtTime(iso: string) {
+  return new Date(iso).toLocaleTimeString('es-MX', { timeZone: TZ, hour: '2-digit', minute: '2-digit' })
+}
+
 const INTENT_LABELS: Record<string, string> = {
   browsing: 'Explorando',
   interested: 'Interesado',
@@ -49,11 +59,11 @@ export default async function ConversacionDetallePage({
       <div className="bg-white rounded-xl border p-5 mb-6 grid grid-cols-2 gap-4 text-sm">
         <div>
           <p className="text-xs text-gray-400 mb-0.5">Inicio</p>
-          <p className="text-gray-700">{new Date(session.started_at).toLocaleString('es-MX')}</p>
+          <p className="text-gray-700">{fmtDate(session.started_at)}</p>
         </div>
         <div>
           <p className="text-xs text-gray-400 mb-0.5">Última actividad</p>
-          <p className="text-gray-700">{new Date(session.last_active).toLocaleString('es-MX')}</p>
+          <p className="text-gray-700">{fmtDate(session.last_active)}</p>
         </div>
         <div>
           <p className="text-xs text-gray-400 mb-0.5">Intent</p>
@@ -89,7 +99,7 @@ export default async function ConversacionDetallePage({
         <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-6 text-sm">
           <p className="text-xs font-medium text-purple-700 mb-2">Cita agendada</p>
           <div className="text-purple-900 space-y-1">
-            <p>{new Date(appointment.start_time).toLocaleString('es-MX')} — {appointment.status}</p>
+            <p>{fmtDate(appointment.start_time)} — {appointment.status}</p>
             {appointment.meet_link && (
               <a href={appointment.meet_link} target="_blank" rel="noopener noreferrer"
                 className="text-purple-600 hover:underline text-xs">{appointment.meet_link}</a>
@@ -111,7 +121,7 @@ export default async function ConversacionDetallePage({
             }`}>
               <p className="whitespace-pre-wrap">{msg.content}</p>
               <p className={`text-xs mt-1 ${msg.role === 'user' ? 'text-blue-200' : 'text-gray-400'}`}>
-                {new Date(msg.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                {fmtTime(msg.created_at)}
               </p>
             </div>
           </div>
