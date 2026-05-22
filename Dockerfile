@@ -1,7 +1,8 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY package-lock.json package.json ./
-RUN npm ci
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 FROM node:20-alpine AS builder
 WORKDIR /app
@@ -25,7 +26,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS="--max-old-space-size=1536"
 
 # npm run build = tsx scripts/build-widget.ts && next build
-RUN npm run build
+RUN node_modules/.bin/tsx scripts/build-widget.ts && node_modules/.bin/next build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
