@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Compiled artifacts and QA reports — not source
+    "public/widget.js",
+    ".qa-reports/**",
   ]),
 ]);
 

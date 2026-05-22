@@ -74,6 +74,7 @@ export function WidgetTokenManager() {
     setLoading(false)
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- async load pattern, setState called after await
   useEffect(() => { load() }, [])
 
   const handleCreate = async (e: React.FormEvent) => {

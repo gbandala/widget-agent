@@ -46,6 +46,7 @@ export function AppointmentPicker({
     }
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- async load pattern, setState called after await
   useEffect(() => { loadSlots(date) }, [date])
 
   const handleBook = async () => {

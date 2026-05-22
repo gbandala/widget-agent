@@ -74,6 +74,7 @@ export function useWidgetChat({ token, anonId, sourceUrl }: UseWidgetChatOptions
     return () => { cancelled = true }
   }, [token, anonId, sourceUrl, sourceOrigin])
 
+  // eslint-disable-next-line react-hooks/refs -- ref accessed inside body callback, not during render
   const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/widget/chat',
     headers: {

@@ -185,6 +185,7 @@ function PendingTab() {
     setLoading(false)
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- async load pattern, setState called after await
   useEffect(() => { load() }, [])
 
   const pending = questions.filter(q => q.status === 'pending')
@@ -356,11 +357,13 @@ export function KBAdmin() {
     setPendingCount((questions ?? []).filter((q: PendingQuestion) => q.status === 'pending').length)
   }
 
+  /* eslint-disable react-hooks/set-state-in-effect -- async load pattern, setState called after await */
   useEffect(() => {
     load()
     loadPendingCount()
     loadTokens()
   }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [filterTokenId]) // re-fetch when filter changes

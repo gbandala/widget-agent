@@ -25,6 +25,7 @@ function getWeekLabel(iso: string) {
 
 export default async function ConversacionesPage() {
   const supabase = await createServiceClient()
+  // eslint-disable-next-line react-hooks/purity -- server component, runs once server-side
   const eightWeeksAgo = new Date(Date.now() - 8 * 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const [{ data: sessions }, { data: chartSessions }, { data: chartErrors }] = await Promise.all([
@@ -52,6 +53,7 @@ export default async function ConversacionesPage() {
   // Build week buckets (last 8 weeks, oldest → newest)
   const weekMap = new Map<string, { label: string; conversations: number; threats: number }>()
   for (let i = 7; i >= 0; i--) {
+    // eslint-disable-next-line react-hooks/purity -- server component, runs once server-side
     const d = new Date(Date.now() - i * 7 * 24 * 60 * 60 * 1000)
     const key = getWeekLabel(d.toISOString())
     if (!weekMap.has(key)) weekMap.set(key, { label: key, conversations: 0, threats: 0 })
