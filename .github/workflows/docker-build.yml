@@ -8,7 +8,36 @@ env:
   IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
-  build-and-deploy:
+  # ── 1. Pre-deploy: unit tests + lint ─────────────────────────────────────
+  pre-deploy:
+    name: Pre-deploy (unit tests + lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+  # ── 2. Build & push Docker image ─────────────────────────────────────────
+  build-and-push:
+    name: Build & push image
+    needs: pre-deploy
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -41,7 +70,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deploy to VPS via SSH
+  # ── 3. Deploy to VPS ──────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to VPS
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -64,3 +100,46 @@ jobs:
               --label "traefik.http.services.widget-agent.loadbalancer.server.port=3000" \
               --env-file /etc/widget-agent.env \
               ghcr.io/${{ github.repository }}:latest
+
+  # ── 4. Post-deploy: smoke tests contra producción ────────────────────────
+  post-deploy:
+    name: Post-deploy (API smoke tests)
+    needs: deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Wait for VPS ready
+        run: |
+          for i in $(seq 1 18); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" https://widget.clariifica.com/api/widget/chat)
+            if [ "$status" = "405" ]; then
+              echo "VPS ready after $((i * 10))s (HTTP $status)"
+              exit 0
+            fi
+            echo "Attempt $i/18: HTTP $status — retrying in 10s..."
+            sleep 10
+          done
+          echo "VPS not ready after 3 minutes"
+          exit 1
+
+      - name: API smoke tests
+        env:
+          WIDGET_TEST_TOKEN: ${{ secrets.WIDGET_TEST_TOKEN }}
+          WIDGET_TEST_ORIGIN: clariifica.com
+          WIDGET_BASE_URL: https://widget.clariifica.com
+        run: pnpm test:api
