@@ -4,8 +4,8 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
-const ALLOWED_TYPES = ['application/pdf', 'text/plain', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'application/vnd.ms-powerpoint']
-const ALLOWED_EXTENSIONS = ['.pdf', '.txt', '.xlsx', '.xls', '.pptx', '.ppt', '.docx']
+const ALLOWED_TYPES = ['application/pdf', 'text/plain', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'application/vnd.ms-powerpoint']
+const ALLOWED_EXTENSIONS = ['.pdf', '.txt', '.xlsx', '.pptx', '.ppt', '.docx']
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     const name = file.name.toLowerCase()
     const ext = '.' + name.split('.').pop()
     if (!ALLOWED_EXTENSIONS.includes(ext) && !ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json({ error: 'Tipo de archivo no soportado. Usa PDF, PPTX, PPT, DOCX, TXT o XLSX.' }, { status: 400 })
+      return NextResponse.json({ error: 'Tipo de archivo no soportado. Usa PDF, PPTX, PPT, DOCX, TXT o XLSX. El formato .xls antiguo no está soportado.' }, { status: 400 })
     }
 
     const buffer = Buffer.from(await file.arrayBuffer())
@@ -37,17 +37,19 @@ export async function POST(req: NextRequest) {
       const pdfParse = pdfModule.default ?? pdfModule
       const result = await pdfParse(buffer)
       rawText = result.text
-    } else if (ext === '.xlsx' || ext === '.xls') {
-      const XLSX = await import('xlsx')
-      const workbook = XLSX.read(buffer, { type: 'buffer' })
+    } else if (ext === '.xlsx') {
+      const ExcelJS = await import('exceljs')
+      const workbook = new ExcelJS.Workbook()
+      await workbook.xlsx.load(buffer)
       const parts: string[] = []
-      for (const sheetName of workbook.SheetNames) {
-        const sheet = workbook.Sheets[sheetName]
-        const csv = XLSX.utils.sheet_to_csv(sheet)
-        if (csv.trim()) {
-          parts.push(`[Hoja: ${sheetName}]\n${csv}`)
-        }
-      }
+      workbook.worksheets.forEach(sheet => {
+        const rows: string[] = []
+        sheet.eachRow(row => {
+          const cells = (row.values as ExcelJS.CellValue[]).slice(1)
+          rows.push(cells.map(c => (c == null ? '' : String(c))).join(','))
+        })
+        if (rows.length) parts.push(`[Hoja: ${sheet.name}]\n${rows.join('\n')}`)
+      })
       rawText = parts.join('\n\n')
     } else if (ext === '.docx') {
       const mammoth = await import('mammoth')

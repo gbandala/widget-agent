@@ -18,7 +18,7 @@ interface ImportWizardProps {
   onClose: () => void
 }
 
-const ACCEPTED = '.pdf,.pptx,.ppt,.docx,.txt,.xlsx,.xls'
+const ACCEPTED = '.pdf,.pptx,.ppt,.docx,.txt,.xlsx'
 const PROCESSING_MESSAGES = [
   'Extrayendo texto del archivo...',
   'Analizando estructura del contenido...',
