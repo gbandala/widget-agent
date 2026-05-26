@@ -8,7 +8,7 @@ const UNIVERSAL_BLOCK_PATTERNS = [
   // Contenido explícito / violento
   /\b(pornografía|contenido sexual explícito|violación)\b/i,
   // Ciberataques directos
-  /\b(ddos|ataque de denegación|exploit|payload malicioso|inyección sql)\b/i,
+  /\b(ddos|ataque de denegaci[oó]n|exploit|payload malicioso|inyecci[oó]n sql)\b/i,
 ]
 
 export interface ScopeResult {

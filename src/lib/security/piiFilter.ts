@@ -10,15 +10,16 @@ const PII_PATTERNS: { pattern: RegExp; replacement: string }[] = [
     pattern: /\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g,
     replacement: '[email protegido]',
   },
+  // Tarjetas de crédito — ANTES que teléfonos para evitar que el patrón de
+  // teléfono consuma los primeros 8 dígitos de un número de 16.
+  {
+    pattern: /\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b/g,
+    replacement: '[datos protegidos]',
+  },
   // Teléfonos MX y genéricos
   {
     pattern: /\b(\+?52\s?)?(\d{2,3}[\s\-]?)?\d{3,4}[\s\-]?\d{4}\b/g,
     replacement: '[teléfono protegido]',
-  },
-  // Tarjetas de crédito
-  {
-    pattern: /\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b/g,
-    replacement: '[datos protegidos]',
   },
   // CURP (México)
   {

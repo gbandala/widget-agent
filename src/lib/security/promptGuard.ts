@@ -3,7 +3,7 @@
  */
 
 const INJECTION_PATTERNS = [
-  /ignora\s+(tus\s+)?(instrucciones|reglas|directrices)/i,
+  /ignora\s+(?:(?:tus|las|sus|mis|estas|esas)\s+)?(instrucciones|reglas|directrices)/i,
   /ignore\s+(your\s+)?(instructions|rules|guidelines)/i,
   /olvida\s+lo\s+que\s+te\s+(dijeron|programaron|instruyeron)/i,
   /forget\s+(everything|all)\s+(you\s+)?(were\s+)?(told|programmed)/i,
