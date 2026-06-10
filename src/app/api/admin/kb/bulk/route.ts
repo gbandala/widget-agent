@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 import { generateEmbeddings } from '@/features/knowledge-base/services/embeddingService'
 import { z } from 'zod'
 
@@ -27,7 +27,6 @@ export async function POST(req: NextRequest) {
     }
 
     const { entries, tokenId: bulkTokenId } = parsed.data
-    const supabase = await createServiceClient()
 
     // Generate embeddings in batches of EMBED_BATCH
     const texts = entries.map(e => `${e.title}\n\n${e.content}`)
@@ -44,18 +43,13 @@ export async function POST(req: NextRequest) {
       content: e.content,
       category: e.category,
       tags: e.tags,
-      embedding: allEmbeddings[i],
+      embedding: JSON.stringify(allEmbeddings[i]),
       is_active: true,
       // Entry-level tokenId overrides bulk-level; both fall back to null (global)
       token_id: e.tokenId ?? bulkTokenId ?? null,
     }))
 
-    const { error } = await supabase.from('kb_entries').insert(rows)
-
-    if (error) {
-      console.error('[KB bulk]', error)
-      return NextResponse.json({ error: 'Error al guardar entradas', detail: error.message }, { status: 500 })
-    }
+    await db`INSERT INTO kb_entries ${db(rows)}`
 
     return NextResponse.json({ imported: rows.length, failed: 0 }, { status: 201 })
   } catch (err) {

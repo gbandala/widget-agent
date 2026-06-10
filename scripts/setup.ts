@@ -5,13 +5,13 @@
  *
  * Pasos:
  * 1. Valida variables de entorno
- * 2. Crea las tablas en Supabase (aplica migración 001)
+ * 2. Aplica las migraciones SQL desde supabase/migrations/
  * 3. Genera el primer widget_token
  * 4. Carga KB inicial desde /supabase/seed/kb.json si existe
  * 5. Muestra resumen de configuración
  */
 
-import { createClient } from '@supabase/supabase-js'
+import postgres from 'postgres'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as readline from 'readline'
@@ -33,8 +33,7 @@ async function main() {
 
   // 1. Validar env
   const required = [
-    'NEXT_PUBLIC_SUPABASE_URL',
-    'SUPABASE_SERVICE_ROLE_KEY',
+    'DATABASE_URL',
     'OPENROUTER_API_KEY',
   ]
 
@@ -61,37 +60,31 @@ async function main() {
   }
   log('Variables de entorno validadas')
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const sql = postgres(process.env.DATABASE_URL!)
 
-  // 2. Aplicar migración SQL
-  const migrationPath = path.join(process.cwd(), 'supabase/migrations/001_initial_schema.sql')
-  if (fs.existsSync(migrationPath)) {
-    const sql = fs.readFileSync(migrationPath, 'utf-8')
-    // Ejecutar en bloques separados por ';'
-    const statements = sql
-      .split(';')
-      .map(s => s.trim())
-      .filter(s => s.length > 0 && !s.startsWith('--'))
+  // 2. Aplicar migraciones SQL
+  const migrationsDir = path.join(process.cwd(), 'supabase/migrations')
+  if (fs.existsSync(migrationsDir)) {
+    const files = fs.readdirSync(migrationsDir)
+      .filter(f => f.endsWith('.sql'))
+      .sort()
 
-    let successCount = 0
-    for (const statement of statements) {
+    for (const file of files) {
+      const migrationSql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8')
       try {
-        const { error: sqlError } = await supabase.rpc('exec_sql', { sql: statement + ';' })
-        if (sqlError && !sqlError.message.includes('already exists')) {
-          warn(`SQL warning: ${sqlError.message}`)
+        await sql.unsafe(migrationSql)
+        log(`Migración aplicada: ${file}`)
+      } catch (err) {
+        const msg = String(err)
+        if (msg.includes('already exists') || msg.includes('duplicate')) {
+          warn(`${file}: ya aplicada (skipped)`)
         } else {
-          successCount++
+          warn(`${file}: ${msg}`)
         }
-      } catch {
-        // Tabla ya existe o extensión ya activada — continuar
       }
     }
-    log(`Migración aplicada (${successCount} statements procesados)`)
   } else {
-    warn('Migración SQL no encontrada. Aplica manualmente: supabase/migrations/001_initial_schema.sql')
+    warn('Directorio supabase/migrations no encontrado. Aplica manualmente.')
   }
 
   // 3. Configurar bot y generar token
@@ -111,9 +104,8 @@ async function main() {
   }
 
   // Insertar token en DB
-  const { data: tokenData, error: tokenError } = await supabase
-    .from('widget_tokens')
-    .insert({
+  const tokenRows = await sql`
+    INSERT INTO widget_tokens ${sql({
       label,
       allowed_origin: allowedOrigin,
       bot_name: botName,
@@ -123,31 +115,28 @@ async function main() {
       agent_tone: 'profesional',
       agent_use_emojis: true,
       // agent_instructions, agent_scope y welcome_message se configuran desde el panel admin
-    })
-    .select()
-    .single()
-
-  if (tokenError) {
-    error(`Error creando token: ${tokenError.message}`)
-    process.exit(1)
-  }
+    })}
+    RETURNING *
+  `
+  const tokenData = tokenRows[0]
   log(`Token creado para "${label}" → ${allowedOrigin}`)
 
   // 4. Cargar KB seed si existe
   const seedPath = path.join(process.cwd(), 'supabase/seed/kb.json')
   if (fs.existsSync(seedPath)) {
     const entries = JSON.parse(fs.readFileSync(seedPath, 'utf-8'))
-    const { error: kbError } = await supabase.from('kb_entries').insert(entries)
-    if (kbError) {
-      warn(`KB seed parcialmente cargado: ${kbError.message}`)
-    } else {
+    try {
+      await sql`INSERT INTO kb_entries ${sql(entries)}`
       log(`KB seed cargado: ${entries.length} entradas`)
+    } catch (err) {
+      warn(`KB seed parcialmente cargado: ${String(err)}`)
     }
   } else {
     warn('No se encontró supabase/seed/kb.json — puedes cargar la KB desde el panel admin')
     // Crear template vacío
     const templatePath = path.join(process.cwd(), 'supabase/seed/kb.example.json')
     if (!fs.existsSync(templatePath)) {
+      fs.mkdirSync(path.dirname(templatePath), { recursive: true })
       fs.writeFileSync(templatePath, JSON.stringify([
         {
           title: "Ejemplo: Servicio principal",
@@ -188,6 +177,8 @@ async function main() {
   console.log('\n  Panel Admin:   http://localhost:3000/tokens')
   console.log('  (configura la personalidad del agente desde el panel admin)')
   console.log('\n════════════════════════════════════════\n')
+
+  await sql.end()
 }
 
 main().catch(e => {

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { createServiceClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,25 +27,48 @@ export default async function ConversacionDetallePage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const supabase = await createServiceClient()
 
-  const [{ data: session }, { data: messages }] = await Promise.all([
-    supabase
-      .from('widget_sessions')
-      .select(`*, widget_leads ( * ), appointments ( start_time, meet_link, status )`)
-      .eq('id', id)
-      .single(),
-    supabase
-      .from('widget_messages')
-      .select('id, role, content, created_at')
-      .eq('session_id', id)
-      .order('created_at', { ascending: true }),
+  const [sessionRows, messages] = await Promise.all([
+    db`
+      SELECT
+        s.*,
+        l.id        AS lead_id,
+        l.name      AS lead_name,
+        l.email     AS lead_email,
+        l.company   AS lead_company,
+        l.phone     AS lead_phone,
+        a.start_time AS appt_start_time,
+        a.meet_link  AS appt_meet_link,
+        a.status     AS appt_status
+      FROM widget_sessions s
+      LEFT JOIN widget_leads l ON l.session_id = s.id
+      LEFT JOIN appointments a ON a.id = s.appointment_id
+      WHERE s.id = ${id}
+      LIMIT 1
+    `,
+    db`
+      SELECT id, role, content, created_at
+      FROM widget_messages
+      WHERE session_id = ${id}
+      ORDER BY created_at ASC
+    `,
   ])
 
+  const session = sessionRows[0]
   if (!session) notFound()
 
-  const lead = Array.isArray(session.widget_leads) ? session.widget_leads[0] : session.widget_leads
-  const appointment = Array.isArray(session.appointments) ? session.appointments[0] : session.appointments
+  const lead = session.lead_id ? {
+    name: session.lead_name as string,
+    email: session.lead_email as string,
+    company: session.lead_company as string | null,
+    phone: session.lead_phone as string | null,
+  } : null
+
+  const appointment = session.appt_start_time ? {
+    start_time: session.appt_start_time as string,
+    meet_link: session.appt_meet_link as string | null,
+    status: session.appt_status as string,
+  } : null
 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
@@ -59,24 +82,24 @@ export default async function ConversacionDetallePage({
       <div className="bg-white rounded-xl border p-5 mb-6 grid grid-cols-2 gap-4 text-sm">
         <div>
           <p className="text-xs text-gray-400 mb-0.5">Inicio</p>
-          <p className="text-gray-700">{fmtDate(session.started_at)}</p>
+          <p className="text-gray-700">{fmtDate(session.started_at as string)}</p>
         </div>
         <div>
           <p className="text-xs text-gray-400 mb-0.5">Última actividad</p>
-          <p className="text-gray-700">{fmtDate(session.last_active)}</p>
+          <p className="text-gray-700">{fmtDate(session.last_active as string)}</p>
         </div>
         <div>
           <p className="text-xs text-gray-400 mb-0.5">Intent</p>
-          <p className="text-gray-700">{INTENT_LABELS[session.intent_detected ?? 'browsing']}</p>
+          <p className="text-gray-700">{INTENT_LABELS[(session.intent_detected as string | null) ?? 'browsing']}</p>
         </div>
         <div>
           <p className="text-xs text-gray-400 mb-0.5">Origen</p>
-          <p className="text-gray-500 truncate">{session.source_url ?? '—'}</p>
+          <p className="text-gray-500 truncate">{(session.source_url as string | null) ?? '—'}</p>
         </div>
         {session.interest_summary && (
           <div className="col-span-2">
             <p className="text-xs text-gray-400 mb-0.5">Resumen de interés</p>
-            <p className="text-gray-700">{session.interest_summary}</p>
+            <p className="text-gray-700">{session.interest_summary as string}</p>
           </div>
         )}
       </div>
@@ -110,8 +133,8 @@ export default async function ConversacionDetallePage({
 
       {/* Messages */}
       <div className="space-y-3">
-        {(messages ?? []).map(msg => (
-          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+        {messages.map(msg => (
+          <div key={msg.id as string} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
               msg.role === 'user'
                 ? 'bg-blue-600 text-white rounded-br-sm'
@@ -119,14 +142,14 @@ export default async function ConversacionDetallePage({
                   ? 'bg-gray-100 text-gray-500 italic text-xs rounded-bl-sm'
                   : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm'
             }`}>
-              <p className="whitespace-pre-wrap">{msg.content}</p>
+              <p className="whitespace-pre-wrap">{msg.content as string}</p>
               <p className={`text-xs mt-1 ${msg.role === 'user' ? 'text-blue-200' : 'text-gray-400'}`}>
-                {fmtTime(msg.created_at)}
+                {fmtTime(msg.created_at as string)}
               </p>
             </div>
           </div>
         ))}
-        {(!messages || messages.length === 0) && (
+        {messages.length === 0 && (
           <p className="text-center text-gray-400 py-8">Sin mensajes registrados</p>
         )}
       </div>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 import { requireWidgetToken } from '@/lib/security/widgetTokenValidator'
 import { z } from 'zod'
 import crypto from 'crypto'
@@ -40,7 +40,6 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.response
 
   try {
-    const supabase = await createServiceClient()
     const body = await req.json()
     const parsed = LeadSchema.safeParse(body)
 
@@ -55,9 +54,8 @@ export async function POST(req: NextRequest) {
     const encryptedPhone = phone ? encrypt(phone) : null
 
     // Crear lead
-    const { data: lead, error: leadError } = await supabase
-      .from('widget_leads')
-      .insert({
+    const leadRows = await db`
+      INSERT INTO widget_leads ${db({
         session_id: sessionId,
         name,
         email: encryptedEmail,
@@ -67,23 +65,22 @@ export async function POST(req: NextRequest) {
         privacy_accepted_at: new Date().toISOString(),
         privacy_version: privacyVersion,
         source_url: sourceUrl ?? null,
-      })
-      .select('id')
-      .single()
+      })}
+      RETURNING id
+    `
 
-    if (leadError) throw leadError
+    const leadId = leadRows[0].id as string
 
     // Actualizar sesión con lead_id e intent
-    await supabase
-      .from('widget_sessions')
-      .update({
-        lead_id: lead.id,
-        intent_detected: 'lead_captured',
-        last_active: new Date().toISOString(),
-      })
-      .eq('id', sessionId)
+    await db`
+      UPDATE widget_sessions
+      SET lead_id = ${leadId},
+          intent_detected = 'lead_captured',
+          last_active = ${new Date().toISOString()}
+      WHERE id = ${sessionId}
+    `
 
-    return NextResponse.json({ leadId: lead.id }, { status: 201 })
+    return NextResponse.json({ leadId }, { status: 201 })
   } catch (err) {
     console.error('[leads]', err)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })

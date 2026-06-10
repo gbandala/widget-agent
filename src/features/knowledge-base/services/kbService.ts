@@ -1,4 +1,4 @@
-import { createServiceClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 import { generateEmbedding } from './embeddingService'
 import type { KBEntry, KBEntryInput, KBSearchResult } from '../types'
 
@@ -8,26 +8,26 @@ export const kbService = {
    * tokenId: filtra por token + globales (NULL). Si omitido, devuelve todo (admin).
    */
   async search(query: string, limit = 5, threshold = 0.45, tokenId?: string | null): Promise<KBSearchResult[]> {
-    const supabase = await createServiceClient()
     const queryEmbedding = await generateEmbedding(query)
 
-    const { data, error } = await supabase.rpc('search_kb', {
-      query_embedding: queryEmbedding,
-      match_threshold: threshold,
-      match_count: limit,
-      p_token_id: tokenId ?? null,
-    })
+    const rows = await db`
+      SELECT * FROM search_kb(
+        ${queryEmbedding}::vector,
+        ${threshold}::float8,
+        ${limit}::int,
+        ${tokenId ?? null}::uuid
+      )
+    `
 
-    if (error) throw new Error(`KB search error: ${error.message}`)
-    if (!data) return []
+    if (!rows || rows.length === 0) return []
 
-    return data.map((row: KBSearchResult) => ({
-      id: row.id,
-      title: row.title,
-      content: row.content,
-      category: row.category,
-      tags: row.tags ?? [],
-      similarity: row.similarity,
+    return rows.map((row) => ({
+      id: row.id as string,
+      title: row.title as string,
+      content: row.content as string,
+      category: row.category as string,
+      tags: (row.tags as string[]) ?? [],
+      similarity: row.similarity as number,
     }))
   },
 
@@ -35,28 +35,33 @@ export const kbService = {
    * Lista entradas de KB. tokenId: filtra por ese token + globales. Omitido = todas.
    */
   async list(tokenId?: string | null): Promise<KBEntry[]> {
-    const supabase = await createServiceClient()
-    let query = supabase
-      .from('kb_entries')
-      .select('id, title, content, category, tags, is_active, token_id, created_at, updated_at')
-      .order('created_at', { ascending: false })
+    let rows
 
     if (tokenId !== undefined && tokenId !== null) {
-      query = query.or(`token_id.eq.${tokenId},token_id.is.null`)
+      rows = await db`
+        SELECT id, title, content, category, tags, is_active, token_id, created_at, updated_at
+        FROM kb_entries
+        WHERE token_id = ${tokenId} OR token_id IS NULL
+        ORDER BY created_at DESC
+      `
+    } else {
+      rows = await db`
+        SELECT id, title, content, category, tags, is_active, token_id, created_at, updated_at
+        FROM kb_entries
+        ORDER BY created_at DESC
+      `
     }
 
-    const { data, error } = await query
-    if (error) throw new Error(`KB list error: ${error.message}`)
-    return (data ?? []).map(row => ({
-      id: row.id,
-      title: row.title,
-      content: row.content,
-      category: row.category,
-      tags: row.tags ?? [],
-      isActive: row.is_active,
-      tokenId: row.token_id ?? null,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+    return rows.map(row => ({
+      id: row.id as string,
+      title: row.title as string,
+      content: row.content as string,
+      category: row.category as string,
+      tags: (row.tags as string[]) ?? [],
+      isActive: row.is_active as boolean,
+      tokenId: (row.token_id as string | null) ?? null,
+      createdAt: row.created_at as string,
+      updatedAt: row.updated_at as string,
     }))
   },
 
@@ -64,35 +69,33 @@ export const kbService = {
    * Crea una nueva entrada en la KB con su embedding.
    */
   async create(input: KBEntryInput): Promise<KBEntry> {
-    const supabase = await createServiceClient()
     const text = `${input.title}\n\n${input.content}`
     const embedding = await generateEmbedding(text)
 
-    const { data, error } = await supabase
-      .from('kb_entries')
-      .insert({
+    const rows = await db`
+      INSERT INTO kb_entries ${db({
         title: input.title,
         content: input.content,
         category: input.category,
         tags: input.tags ?? [],
-        embedding,
+        embedding: JSON.stringify(embedding),
         is_active: true,
         token_id: input.tokenId ?? null,
-      })
-      .select()
-      .single()
+      })}
+      RETURNING *
+    `
+    const data = rows[0]
 
-    if (error) throw new Error(`KB create error: ${error.message}`)
     return {
-      id: data.id,
-      title: data.title,
-      content: data.content,
-      category: data.category,
-      tags: data.tags ?? [],
-      isActive: data.is_active,
-      tokenId: data.token_id ?? null,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
+      id: data.id as string,
+      title: data.title as string,
+      content: data.content as string,
+      category: data.category as string,
+      tags: (data.tags as string[]) ?? [],
+      isActive: data.is_active as boolean,
+      tokenId: (data.token_id as string | null) ?? null,
+      createdAt: data.created_at as string,
+      updatedAt: data.updated_at as string,
     }
   },
 
@@ -100,7 +103,6 @@ export const kbService = {
    * Actualiza una entrada y regenera su embedding si cambió el contenido.
    */
   async update(id: string, input: Partial<KBEntryInput>): Promise<void> {
-    const supabase = await createServiceClient()
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     }
@@ -112,36 +114,27 @@ export const kbService = {
     if ('tokenId' in input) updates.token_id = input.tokenId ?? null
 
     if (input.title || input.content) {
-      const { data: existing } = await supabase
-        .from('kb_entries')
-        .select('title, content')
-        .eq('id', id)
-        .single()
-
-      if (existing) {
-        const title = input.title ?? existing.title
-        const content = input.content ?? existing.content
-        updates.embedding = await generateEmbedding(`${title}\n\n${content}`)
+      const existing = await db`SELECT title, content FROM kb_entries WHERE id = ${id} LIMIT 1`
+      if (existing[0]) {
+        const title = input.title ?? (existing[0].title as string)
+        const content = input.content ?? (existing[0].content as string)
+        updates.embedding = JSON.stringify(await generateEmbedding(`${title}\n\n${content}`))
       }
     }
 
-    const { error } = await supabase.from('kb_entries').update(updates).eq('id', id)
-    if (error) throw new Error(`KB update error: ${error.message}`)
+    await db`UPDATE kb_entries SET ${db(updates)} WHERE id = ${id}`
   },
 
   async setActive(id: string, isActive: boolean): Promise<void> {
-    const supabase = await createServiceClient()
-    const { error } = await supabase
-      .from('kb_entries')
-      .update({ is_active: isActive, updated_at: new Date().toISOString() })
-      .eq('id', id)
-    if (error) throw new Error(`KB setActive error: ${error.message}`)
+    await db`
+      UPDATE kb_entries
+      SET is_active = ${isActive}, updated_at = ${new Date().toISOString()}
+      WHERE id = ${id}
+    `
   },
 
   async delete(id: string): Promise<void> {
-    const supabase = await createServiceClient()
-    const { error } = await supabase.from('kb_entries').delete().eq('id', id)
-    if (error) throw new Error(`KB delete error: ${error.message}`)
+    await db`DELETE FROM kb_entries WHERE id = ${id}`
   },
 
   formatForContext(results: KBSearchResult[]): string {

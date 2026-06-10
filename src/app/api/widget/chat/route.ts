@@ -9,7 +9,7 @@ import { checkPromptInjection, INJECTION_BLOCKED_MESSAGE } from '@/lib/security/
 import { checkGibberish, GIBBERISH_RESPONSE } from '@/lib/security/gibberishGuard'
 import { filterPII } from '@/lib/security/piiFilter'
 import { checkRateLimit, checkMessageVelocity } from '@/lib/security/rateLimiter'
-import { createServiceClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 
 // ---- Token validation cache (60s TTL) ----
 type TokenCacheEntry = {
@@ -50,7 +50,6 @@ function errorResponse(type: string, retryable = true) {
 }
 
 async function logError(
-  supabase: Awaited<ReturnType<typeof createServiceClient>>,
   type: string,
   tokenId: string | null,
   sessionId: string | null,
@@ -59,14 +58,16 @@ async function logError(
   ipHash: string
 ) {
   try {
-    await supabase.from('widget_error_logs').insert({
-      error_type: type,
-      token_id: tokenId,
-      session_id: sessionId,
-      message: message.slice(0, 500),
-      source_url: sourceUrl,
-      ip_hash: ipHash,
-    })
+    await db`
+      INSERT INTO widget_error_logs ${db({
+        error_type: type,
+        token_id: tokenId,
+        session_id: sessionId,
+        message: message.slice(0, 500),
+        source_url: sourceUrl,
+        ip_hash: ipHash,
+      })}
+    `
   } catch { /* log errors silently */ }
 }
 
@@ -74,7 +75,6 @@ const normalizeOrigin = (o: string) => o.replace(/\/+$/, '').toLowerCase()
 
 // ---- Validate widget token (with 60s cache) ----
 async function validateToken(
-  supabase: Awaited<ReturnType<typeof createServiceClient>>,
   token: string,
   origin: string
 ) {
@@ -82,19 +82,36 @@ async function validateToken(
   const cached = tokenCache.get(cacheKey)
   if (cached && cached.expiresAt > Date.now()) return cached.data
 
-  const { data, error } = await supabase
-    .from('widget_tokens')
-    .select('id, is_active, allowed_origin, bot_name, bot_avatar_url, agent_language, agent_tone, agent_instructions, agent_scope, agent_use_emojis, welcome_message')
-    .eq('token', token)
-    .single()
-
-  if (error || !data) return null
+  const rows = await db`
+    SELECT id, is_active, allowed_origin, bot_name, bot_avatar_url,
+           agent_language, agent_tone, agent_instructions, agent_scope,
+           agent_use_emojis, welcome_message
+    FROM widget_tokens
+    WHERE token = ${token}
+    LIMIT 1
+  `
+  const data = rows[0]
+  if (!data) return null
   if (!data.is_active) return null
   if (data.allowed_origin !== '*' &&
-      normalizeOrigin(data.allowed_origin) !== normalizeOrigin(origin)) return null
+      normalizeOrigin(data.allowed_origin as string) !== normalizeOrigin(origin)) return null
 
-  tokenCache.set(cacheKey, { data, expiresAt: Date.now() + TOKEN_CACHE_TTL })
-  return data
+  const tokenData = {
+    id: data.id as string,
+    is_active: data.is_active as boolean,
+    allowed_origin: data.allowed_origin as string,
+    bot_name: data.bot_name as string | null,
+    bot_avatar_url: data.bot_avatar_url as string | null,
+    agent_language: data.agent_language as string | null,
+    agent_tone: data.agent_tone as string | null,
+    agent_instructions: data.agent_instructions as string | null,
+    agent_scope: data.agent_scope as string | null,
+    agent_use_emojis: data.agent_use_emojis as boolean | null,
+    welcome_message: data.welcome_message as string | null,
+  }
+
+  tokenCache.set(cacheKey, { data: tokenData, expiresAt: Date.now() + TOKEN_CACHE_TTL })
+  return tokenData
 }
 
 // ---- System prompt builder ----
@@ -163,8 +180,6 @@ Cuando refieras a contenido de la página, indica en qué sección está.`
 
 // ---- Main handler ----
 export async function POST(req: NextRequest) {
-  const supabase = await createServiceClient()
-
   // Hash IP para logs (no guardamos IP directa)
   const ipRaw = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown'
   const ip = ipRaw.split(',')[0].trim()
@@ -174,7 +189,6 @@ export async function POST(req: NextRequest) {
   // (important in iframe/embed mode where Origin is the widget app, not the host site)
   const origin = req.headers.get('x-source-origin') || req.headers.get('origin') || ''
   const token = req.headers.get('authorization')?.replace('Bearer ', '') ?? ''
-  const anonId = req.headers.get('x-anon-id') ?? ''
 
   // 1. Rate limit por IP (antes de cualquier DB query)
   const ipLimit = await checkRateLimit(ipHash, 'ip')
@@ -183,16 +197,16 @@ export async function POST(req: NextRequest) {
   }
 
   // 2. Validar token
-  const tokenData = await validateToken(supabase, token, origin)
+  const tokenData = await validateToken(token, origin)
   if (!tokenData) {
-    await logError(supabase, 'auth_error', null, null, 'Token inválido o inactivo', origin, ipHash)
+    await logError('auth_error', null, null, 'Token inválido o inactivo', origin, ipHash)
     return errorResponse('auth_error', false)
   }
 
   // 3. Rate limit por token
   const tokenLimit = await checkRateLimit(tokenData.id, 'token')
   if (!tokenLimit.allowed) {
-    await logError(supabase, 'rate_limit_token', tokenData.id, null, 'Token rate limit exceeded', origin, ipHash)
+    await logError('rate_limit_token', tokenData.id, null, 'Token rate limit exceeded', origin, ipHash)
     return errorResponse('rate_limit', true)
   }
 
@@ -224,7 +238,7 @@ export async function POST(req: NextRequest) {
   // 4. Prompt injection check
   const injectionCheck = checkPromptInjection(userText)
   if (!injectionCheck.safe) {
-    await logError(supabase, 'injection_attempt', tokenData.id, sessionId ?? null, userText.slice(0, 200), sourceUrl, ipHash)
+    await logError('injection_attempt', tokenData.id, sessionId ?? null, userText.slice(0, 200), sourceUrl, ipHash)
     return NextResponse.json({
       type: 'text',
       text: INJECTION_BLOCKED_MESSAGE,
@@ -234,7 +248,7 @@ export async function POST(req: NextRequest) {
   // 5. Scope check
   const scopeCheck = checkScope(userText)
   if (!scopeCheck.allowed) {
-    await logError(supabase, 'scope_violation', tokenData.id, sessionId ?? null, userText.slice(0, 200), sourceUrl, ipHash)
+    await logError('scope_violation', tokenData.id, sessionId ?? null, userText.slice(0, 200), sourceUrl, ipHash)
     return NextResponse.json({
       type: 'text',
       text: SCOPE_DECLINE_MESSAGE,
@@ -253,22 +267,23 @@ export async function POST(req: NextRequest) {
     let landingContext = ''
     if (sourceUrl && sessionId) {
       // Intentar cargar desde caché de la sesión
-      const { data: sessionData } = await supabase
-        .from('widget_sessions')
-        .select('landing_content')
-        .eq('id', sessionId)
-        .single()
+      const sessionRows = await db`
+        SELECT landing_content FROM widget_sessions WHERE id = ${sessionId} LIMIT 1
+      `
+      const sessionData = sessionRows[0]
 
       if (sessionData?.landing_content) {
-        landingContext = sessionData.landing_content
+        landingContext = sessionData.landing_content as string
       } else {
         const landing = await readLanding(sourceUrl)
         landingContext = formatLandingForContext(landing)
         // Guardar en caché
-        await supabase
-          .from('widget_sessions')
-          .update({ landing_content: landingContext, last_active: new Date().toISOString() })
-          .eq('id', sessionId)
+        await db`
+          UPDATE widget_sessions
+          SET landing_content = ${landingContext},
+              last_active = ${new Date().toISOString()}
+          WHERE id = ${sessionId}
+        `
       }
     }
 
@@ -331,12 +346,14 @@ export async function POST(req: NextRequest) {
         }),
         execute: async ({ question }) => {
           try {
-            await supabase.from('kb_pending_questions').insert({
-              question: question.slice(0, 500),
-              session_id: sessionId ?? null,
-              token_id: tokenData.id,
-              source_url: sourceUrl || null,
-            })
+            await db`
+              INSERT INTO kb_pending_questions ${db({
+                question: question.slice(0, 500),
+                session_id: sessionId ?? null,
+                token_id: tokenData.id,
+                source_url: sourceUrl || null,
+              })}
+            `
           } catch { /* silently ignore */ }
           return { logged: true }
         },
@@ -355,22 +372,17 @@ export async function POST(req: NextRequest) {
         // Guardar mensajes en DB
         if (sessionId) {
           const cleanText = filterPII(text)
-          await supabase.from('widget_messages').insert([
-            {
-              session_id: sessionId,
-              role: 'user',
-              content: userText,
-            },
-            {
-              session_id: sessionId,
-              role: 'assistant',
-              content: cleanText,
-            },
-          ])
-          await supabase
-            .from('widget_sessions')
-            .update({ last_active: new Date().toISOString() })
-            .eq('id', sessionId)
+          await db`
+            INSERT INTO widget_messages ${db([
+              { session_id: sessionId, role: 'user', content: userText },
+              { session_id: sessionId, role: 'assistant', content: cleanText },
+            ])}
+          `
+          await db`
+            UPDATE widget_sessions
+            SET last_active = ${new Date().toISOString()}
+            WHERE id = ${sessionId}
+          `
         }
       },
     })
@@ -384,7 +396,7 @@ export async function POST(req: NextRequest) {
         ? 'connection_error'
         : 'api_error'
 
-    await logError(supabase, errType, tokenData.id, sessionId ?? null, errMessage, sourceUrl, ipHash)
+    await logError(errType, tokenData.id, sessionId ?? null, errMessage, sourceUrl, ipHash)
     return errorResponse(errType)
   }
 }

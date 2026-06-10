@@ -1,4 +1,4 @@
-import { createServiceClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,12 +16,12 @@ const ERROR_TYPE_LABELS: Record<string, string> = {
 }
 
 export default async function LogsPage() {
-  const supabase = await createServiceClient()
-  const { data: logs } = await supabase
-    .from('widget_error_logs')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(100)
+  const logs = await db`
+    SELECT *
+    FROM widget_error_logs
+    ORDER BY created_at DESC
+    LIMIT 100
+  `
 
   return (
     <div className="max-w-5xl mx-auto py-8 px-4">
@@ -41,25 +41,25 @@ export default async function LogsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {(logs ?? []).map(log => (
-              <tr key={log.id} className={log.error_type === 'injection_attempt' ? 'bg-red-50' : ''}>
+            {logs.map(log => (
+              <tr key={log.id as string} className={log.error_type === 'injection_attempt' ? 'bg-red-50' : ''}>
                 <td className="px-4 py-3">
                   <span className={`text-xs font-medium px-2 py-0.5 rounded ${
                     log.error_type === 'injection_attempt' ? 'bg-red-100 text-red-700' :
                     log.error_type === 'api_error' || log.error_type === 'quota_exceeded' ? 'bg-orange-100 text-orange-700' :
                     'bg-gray-100 text-gray-600'
                   }`}>
-                    {ERROR_TYPE_LABELS[log.error_type] ?? log.error_type}
+                    {ERROR_TYPE_LABELS[log.error_type as string] ?? log.error_type as string}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{log.message ?? '—'}</td>
-                <td className="px-4 py-3 text-gray-400 text-xs truncate max-w-[200px]">{log.source_url ?? '—'}</td>
+                <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{(log.message as string | null) ?? '—'}</td>
+                <td className="px-4 py-3 text-gray-400 text-xs truncate max-w-[200px]">{(log.source_url as string | null) ?? '—'}</td>
                 <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
-                  {new Date(log.created_at).toLocaleString('es-MX')}
+                  {new Date(log.created_at as string).toLocaleString('es-MX')}
                 </td>
               </tr>
             ))}
-            {(!logs || logs.length === 0) && (
+            {logs.length === 0 && (
               <tr>
                 <td colSpan={4} className="px-4 py-8 text-center text-gray-400">Sin registros</td>
               </tr>

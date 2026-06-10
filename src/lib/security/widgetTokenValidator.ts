@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 
 export interface TokenValidation {
   valid: boolean
@@ -22,14 +22,15 @@ export async function validateWidgetToken(
   }
 
   try {
-    const supabase = await createServiceClient()
-    const { data, error } = await supabase
-      .from('widget_tokens')
-      .select('id, is_active, allowed_origin, bot_name, bot_avatar_url')
-      .eq('token', token)
-      .single()
+    const rows = await db`
+      SELECT id, is_active, allowed_origin, bot_name, bot_avatar_url
+      FROM widget_tokens
+      WHERE token = ${token}
+      LIMIT 1
+    `
+    const data = rows[0]
 
-    if (error || !data) {
+    if (!data) {
       return { valid: false, reason: 'token_not_found' }
     }
 
@@ -39,7 +40,7 @@ export async function validateWidgetToken(
 
     // Verificar origen (acepta wildcard '*' para desarrollo)
     const normalizedOrigin = origin.replace(/\/$/, '')
-    const normalizedAllowed = data.allowed_origin.replace(/\/$/, '')
+    const normalizedAllowed = (data.allowed_origin as string).replace(/\/$/, '')
 
     if (normalizedAllowed !== '*' && normalizedAllowed !== normalizedOrigin) {
       return { valid: false, reason: 'origin_mismatch' }
@@ -47,9 +48,9 @@ export async function validateWidgetToken(
 
     return {
       valid: true,
-      tokenId: data.id,
-      botName: data.bot_name ?? 'Asistente',
-      botAvatarUrl: data.bot_avatar_url,
+      tokenId: data.id as string,
+      botName: (data.bot_name as string | null) ?? 'Asistente',
+      botAvatarUrl: data.bot_avatar_url as string | null,
     }
   } catch {
     return { valid: false, reason: 'validation_error' }

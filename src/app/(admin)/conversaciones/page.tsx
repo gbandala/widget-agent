@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { createServiceClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 import ConversacionesChart from './ConversacionesChart'
 
 export const dynamic = 'force-dynamic'
@@ -24,47 +24,44 @@ function getWeekLabel(iso: string) {
 }
 
 export default async function ConversacionesPage() {
-  const supabase = await createServiceClient()
-  // eslint-disable-next-line react-hooks/purity -- server component, runs once server-side
   const eightWeeksAgo = new Date(Date.now() - 8 * 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  const [{ data: sessions }, { data: chartSessions }, { data: chartErrors }] = await Promise.all([
-    supabase
-      .from('widget_sessions')
-      .select(`
-        id, source_url, interest_summary, started_at, last_active,
-        widget_leads ( name, email ),
-        widget_messages ( count )
-      `)
-      .order('last_active', { ascending: false })
-      .limit(20),
-
-    supabase
-      .from('widget_sessions')
-      .select('started_at')
-      .gte('started_at', eightWeeksAgo),
-
-    supabase
-      .from('widget_error_logs')
-      .select('created_at')
-      .gte('created_at', eightWeeksAgo),
+  const [sessions, chartSessions, chartErrors] = await Promise.all([
+    db`
+      SELECT
+        s.id,
+        s.source_url,
+        s.interest_summary,
+        s.started_at,
+        s.last_active,
+        l.name  AS lead_name,
+        l.email AS lead_email,
+        COUNT(m.id)::int AS message_count
+      FROM widget_sessions s
+      LEFT JOIN widget_leads l ON l.session_id = s.id
+      LEFT JOIN widget_messages m ON m.session_id = s.id
+      GROUP BY s.id, s.source_url, s.interest_summary, s.started_at, s.last_active, l.name, l.email
+      ORDER BY s.last_active DESC
+      LIMIT 20
+    `,
+    db`SELECT started_at FROM widget_sessions WHERE started_at >= ${eightWeeksAgo}`,
+    db`SELECT created_at FROM widget_error_logs WHERE created_at >= ${eightWeeksAgo}`,
   ])
 
   // Build week buckets (last 8 weeks, oldest → newest)
   const weekMap = new Map<string, { label: string; conversations: number; threats: number }>()
   for (let i = 7; i >= 0; i--) {
-    // eslint-disable-next-line react-hooks/purity -- server component, runs once server-side
     const d = new Date(Date.now() - i * 7 * 24 * 60 * 60 * 1000)
     const key = getWeekLabel(d.toISOString())
     if (!weekMap.has(key)) weekMap.set(key, { label: key, conversations: 0, threats: 0 })
   }
-  for (const s of chartSessions ?? []) {
-    const key = getWeekLabel(s.started_at)
+  for (const s of chartSessions) {
+    const key = getWeekLabel(s.started_at as string)
     const entry = weekMap.get(key)
     if (entry) entry.conversations++
   }
-  for (const e of chartErrors ?? []) {
-    const key = getWeekLabel(e.created_at)
+  for (const e of chartErrors) {
+    const key = getWeekLabel(e.created_at as string)
     const entry = weekMap.get(key)
     if (entry) entry.threats++
   }
@@ -92,31 +89,31 @@ export default async function ConversacionesPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {(sessions ?? []).map(s => {
-              const lead = Array.isArray(s.widget_leads) ? s.widget_leads[0] : s.widget_leads
-              const msgCount = Array.isArray(s.widget_messages) ? s.widget_messages[0]?.count ?? 0 : 0
+            {sessions.map(s => {
+              const hasLead = s.lead_name != null
+              const msgCount = (s.message_count as number) ?? 0
 
               return (
-                <tr key={s.id} className="hover:bg-gray-50">
+                <tr key={s.id as string} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
-                    {fmtDate(s.started_at)}
+                    {fmtDate(s.started_at as string)}
                   </td>
                   <td className="px-4 py-3">
-                    {lead ? (
+                    {hasLead ? (
                       <div>
-                        <p className="font-medium text-gray-900 text-xs">{lead.name}</p>
-                        <p className="text-gray-400 text-xs">{lead.email}</p>
+                        <p className="font-medium text-gray-900 text-xs">{s.lead_name as string}</p>
+                        <p className="text-gray-400 text-xs">{s.lead_email as string}</p>
                       </div>
                     ) : (
                       <span className="text-gray-300 text-xs">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs max-w-xs truncate">
-                    {msgCount >= 2 ? (s.interest_summary ?? '—') : ''}
+                    {msgCount >= 2 ? ((s.interest_summary as string | null) ?? '—') : ''}
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs text-center">{msgCount}</td>
                   <td className="px-4 py-3 text-gray-400 text-xs truncate max-w-[160px]">
-                    {s.source_url ?? '—'}
+                    {(s.source_url as string | null) ?? '—'}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
@@ -129,7 +126,7 @@ export default async function ConversacionesPage() {
                 </tr>
               )
             })}
-            {(!sessions || sessions.length === 0) && (
+            {sessions.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-gray-400">Sin conversaciones</td>
               </tr>

@@ -1,6 +1,6 @@
 import { getCalendarClient, CALENDAR_ID, DEFAULT_MEETING_DURATION_MINUTES } from '@/lib/google/calendarClient'
 import type { AppointmentSlot, CreateAppointmentInput } from '../types'
-import { createServiceClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 
 /**
  * Obtiene los slots libres del calendario para una fecha dada.
@@ -134,7 +134,7 @@ export async function createAppointment(input: CreateAppointmentInput): Promise<
 }
 
 /**
- * Crea la cita completa: evento en Google + registro en Supabase.
+ * Crea la cita completa: evento en Google + registro en DB.
  */
 export async function bookAppointment(input: CreateAppointmentInput): Promise<{
   meetLink: string
@@ -143,32 +143,30 @@ export async function bookAppointment(input: CreateAppointmentInput): Promise<{
 }> {
   const { googleEventId, meetLink } = await createAppointment(input)
 
-  const supabase = await createServiceClient()
-  const { data, error } = await supabase
-    .from('appointments')
-    .insert({
+  const rows = await db`
+    INSERT INTO appointments ${db({
       session_id: input.sessionId,
       lead_id: input.leadId,
       google_event_id: googleEventId,
       meet_link: meetLink,
       start_time: input.startTime,
       end_time: input.endTime,
-      notes: input.notes,
-    })
-    .select('id')
-    .single()
+      notes: input.notes ?? null,
+    })}
+    RETURNING id
+  `
+  if (!rows[0]) throw new Error('Error guardando cita')
 
-  if (error) throw new Error(`Error guardando cita: ${error.message}`)
+  const appointmentId = rows[0].id as string
 
   // Actualizar sesión
-  await supabase
-    .from('widget_sessions')
-    .update({
-      appointment_id: data.id,
-      intent_detected: 'booked',
-      last_active: new Date().toISOString(),
-    })
-    .eq('id', input.sessionId)
+  await db`
+    UPDATE widget_sessions
+    SET appointment_id = ${appointmentId},
+        intent_detected = 'booked',
+        last_active = ${new Date().toISOString()}
+    WHERE id = ${input.sessionId}
+  `
 
-  return { meetLink, googleEventId, appointmentId: data.id }
+  return { meetLink, googleEventId, appointmentId }
 }

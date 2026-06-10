@@ -1,5 +1,5 @@
 import { WidgetLauncher } from '@/features/widget/components/WidgetLauncher'
-import { createServiceClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 
 interface EmbedPageProps {
   searchParams: Promise<{
@@ -29,17 +29,18 @@ export default async function EmbedPage({ searchParams }: EmbedPageProps) {
   let dbWelcomeMessage: string | null = null
 
   try {
-    const supabase = await createServiceClient()
-    const { data } = await supabase
-      .from('widget_tokens')
-      .select('bot_name, bot_avatar_url, welcome_message, is_active')
-      .eq('token', token)
-      .single()
+    const rows = await db`
+      SELECT bot_name, bot_avatar_url, welcome_message, is_active
+      FROM widget_tokens
+      WHERE token = ${token}
+      LIMIT 1
+    `
+    const data = rows[0]
 
     if (data?.is_active) {
-      dbBotName = data.bot_name ?? 'Asistente'
-      dbBotAvatarUrl = data.bot_avatar_url ?? null
-      dbWelcomeMessage = data.welcome_message ?? null
+      dbBotName = (data.bot_name as string | null) ?? 'Asistente'
+      dbBotAvatarUrl = (data.bot_avatar_url as string | null) ?? null
+      dbWelcomeMessage = (data.welcome_message as string | null) ?? null
     }
   } catch { /* use defaults on error */ }
 
