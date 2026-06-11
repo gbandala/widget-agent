@@ -3,9 +3,7 @@ import type { NextConfig } from 'next'
 const nextConfig: NextConfig = {
   output: 'standalone',
   typescript: { ignoreBuildErrors: true },
-  // Webpack (no Turbopack) — Turbopack spike RAM en build, mata el proceso en VPS CPX21
-  experimental: { cpus: 1 },
-  bundlePagesRouterDependencies: true,
+  // sin experimental.cpus — evita activar Turbopack implícitamente en Next.js 16
   // Allow images from any HTTPS source (for bot avatars)
   images: {
     remotePatterns: [

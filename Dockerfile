@@ -22,7 +22,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS="--max-old-space-size=1024"
 
 # npm run build = tsx scripts/build-widget.ts && next build
-RUN node_modules/.bin/tsx scripts/build-widget.ts && node_modules/.bin/next build --no-turbopack
+RUN node_modules/.bin/tsx scripts/build-widget.ts && node_modules/.bin/next build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
