@@ -71,7 +71,14 @@ async function logError(
   } catch { /* log errors silently */ }
 }
 
-const normalizeOrigin = (o: string) => o.replace(/\/+$/, '').toLowerCase()
+const normalizeOrigin = (o: string) => {
+  try {
+    const s = o.includes('://') ? o : `https://${o}`
+    return new URL(s).hostname.toLowerCase()
+  } catch {
+    return o.replace(/\/+$/, '').toLowerCase()
+  }
+}
 
 // ---- Validate widget token (with 60s cache) ----
 async function validateToken(
