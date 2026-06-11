@@ -39,7 +39,11 @@ export async function validateWidgetToken(
     }
 
     // Verificar origen (acepta wildcard '*' para desarrollo)
-    const normalizedOrigin = origin.replace(/\/$/, '')
+    // Extrae solo el hostname para comparar: "https://clariifica.com" → "clariifica.com"
+    const extractHostname = (s: string) => {
+      try { return new URL(s).hostname } catch { return s.replace(/\/$/, '') }
+    }
+    const normalizedOrigin = extractHostname(origin)
     const normalizedAllowed = (data.allowed_origin as string).replace(/\/$/, '')
 
     if (normalizedAllowed !== '*' && normalizedAllowed !== normalizedOrigin) {
