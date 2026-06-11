@@ -19,10 +19,10 @@ ENV NEXT_PUBLIC_DEMO_WIDGET_TOKEN=$NEXT_PUBLIC_DEMO_WIDGET_TOKEN
 # Disable telemetry prompt (avoids pause + noise in CI logs)
 ENV NEXT_TELEMETRY_DISABLED=1
 # Cap Node heap to 1.5 GB — prevents OOM kills on shared VPS RAM
-ENV NODE_OPTIONS="--max-old-space-size=1536"
+ENV NODE_OPTIONS="--max-old-space-size=1024"
 
 # npm run build = tsx scripts/build-widget.ts && next build
-RUN node_modules/.bin/tsx scripts/build-widget.ts && node_modules/.bin/next build
+RUN node_modules/.bin/tsx scripts/build-widget.ts && node_modules/.bin/next build --no-turbopack
 
 FROM node:20-alpine AS runner
 WORKDIR /app

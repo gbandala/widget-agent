@@ -3,8 +3,9 @@ import type { NextConfig } from 'next'
 const nextConfig: NextConfig = {
   output: 'standalone',
   typescript: { ignoreBuildErrors: true },
-  // Limit parallel workers during build — reduces peak RAM on VPS (CPX21 = 4 GB shared)
+  // Webpack (no Turbopack) — Turbopack spike RAM en build, mata el proceso en VPS CPX21
   experimental: { cpus: 1 },
+  bundlePagesRouterDependencies: true,
   // Allow images from any HTTPS source (for bot avatars)
   images: {
     remotePatterns: [
