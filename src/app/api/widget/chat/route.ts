@@ -11,7 +11,6 @@ import { filterPII } from '@/lib/security/piiFilter'
 import { checkRateLimit, checkMessageVelocity } from '@/lib/security/rateLimiter'
 import { db } from '@/lib/db'
 import { sendWelcomeEmail } from '@/lib/email/emailService'
-import { getAvailableSlots as fetchCalendarSlots } from '@/features/appointments/services/googleCalendarService'
 
 // ---- Token validation cache (60s TTL) ----
 type TokenCacheEntry = {
@@ -203,9 +202,9 @@ PREFERENCIA DE CONTACTO — después de captureEmail exitoso:
 
 AGENDAMIENTO — después de captureContactPreference:
 - Ofrece agendar una sesión de diagnóstico de 30 minutos sin costo.
-- Cuando el usuario acepte agendar: llama getAvailableSlots para verificar disponibilidad.
-- Si hay slots: llama INMEDIATAMENTE bookAppointment. NO listes los slots en texto — el selector visual los mostrará al usuario.
-- Si no hay slots: "En este momento no tengo horarios disponibles. Te contactaremos pronto en el canal que elegiste."
+- Cuando el usuario acepte agendar: llama bookAppointment INMEDIATAMENTE. No preguntes nada más antes.
+- bookAppointment mostrará un selector visual con los horarios disponibles — nunca los listes en texto.
+- No hay que verificar disponibilidad por tu cuenta; el selector se encarga de eso.
 ${kbContext ? `\nCONOCIMIENTO BASE:\n${kbContext}` : ''}
 ${landingContext ? `\n${landingContext}` : ''}
 Cuando refieras a contenido de la página, indica en qué sección está.`
@@ -402,29 +401,12 @@ export async function POST(req: NextRequest) {
         },
       }),
 
-      getAvailableSlots: tool({
-        description: 'Obtiene los horarios disponibles para una cita de diagnóstico de 30 minutos',
-        inputSchema: z.object({
-          preferredDate: z.string().optional().describe('Fecha preferida en formato YYYY-MM-DD'),
-        }),
-        execute: async ({ preferredDate }) => {
-          try {
-            const slots = await fetchCalendarSlots(preferredDate)
-            return { slots }
-          } catch {
-            return { slots: [], message: 'No se pudo obtener disponibilidad. Puedes escribirnos directamente.' }
-          }
-        },
-      }),
-
       bookAppointment: tool({
-        description: 'Activa el selector de cita en el chat para que el visitante elija un horario específico',
+        description: 'Muestra el selector de cita al usuario para que elija fecha y horario. Llama esto cuando el usuario quiera agendar — no necesitas saber los horarios de antemano, el selector los carga.',
         inputSchema: z.object({
-          slotStart: z.string().describe('ISO 8601 inicio del slot elegido'),
-          slotEnd: z.string().describe('ISO 8601 fin del slot elegido'),
-          notes: z.string().optional().describe('Tema a tratar en la sesión'),
+          notes: z.string().optional().describe('Tema o contexto para la sesión'),
         }),
-        // Sin execute — muestra el AppointmentPicker en el cliente
+        // Sin execute — muestra el AppointmentPicker en el cliente (human-in-the-loop)
       }),
 
       logUnansweredQuestion: tool({
