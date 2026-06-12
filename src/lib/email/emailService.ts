@@ -1,8 +1,12 @@
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
 const FROM = 'Serena de Clarifica <serena@clariifica.com>'
+
+function getResend() {
+  const key = process.env.RESEND_API_KEY
+  if (!key) throw new Error('RESEND_API_KEY no configurada')
+  return new Resend(key)
+}
 
 interface WelcomeEmailParams {
   to: string
@@ -11,7 +15,7 @@ interface WelcomeEmailParams {
 }
 
 export async function sendWelcomeEmail({ to, conversationSummary, sessionId }: WelcomeEmailParams) {
-  const { data, error } = await resend.emails.send({
+  const { data, error } = await getResend().emails.send({
     from: FROM,
     to,
     subject: 'Gracias por tu interés en Clarifica',
