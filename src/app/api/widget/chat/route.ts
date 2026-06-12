@@ -331,9 +331,10 @@ export async function POST(req: NextRequest) {
           preferredDate: z.string().optional().describe('Fecha preferida en formato YYYY-MM-DD'),
         }),
         execute: async ({ preferredDate }) => {
-          // Llamar al endpoint de Google Calendar
           try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/appointments?date=${preferredDate ?? ''}`)
+            const url = new URL(`${process.env.NEXT_PUBLIC_APP_URL}/api/appointments`)
+            if (preferredDate) url.searchParams.set('date', preferredDate)
+            const res = await fetch(url.toString())
             const data = await res.json()
             return data
           } catch {
