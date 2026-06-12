@@ -30,9 +30,20 @@ export const openrouter = createOpenAICompatible({
 })
 
 export const MODELS = {
+  // Producción actual — Anthropic directo (evita Bedrock con openrouterFetch)
   fast: 'anthropic/claude-haiku-4-5',
   balanced: 'anthropic/claude-sonnet-4-6',
   powerful: 'anthropic/claude-opus-4-6',
+
+  // Alternativas para testing y fallback
+  // Activar cambiando el valor de MODELS.fast en el chat route
+  // Probados 2026-06-12 — solo minimax disponible como alternativa real
+  gemini_flash: 'google/gemini-flash-1.5',               // endpoint correcto (flash-001 no existe en OR)
+  nemotron:     'nvidia/llama-3.1-nemotron-70b-instruct:free', // verificar disponibilidad en OR
+  mistral:      'mistralai/mistral-small-3.1-24b-instruct', // versión paga (free tier descontinuado)
+  minimax:      'minimax/minimax-01',                     // ✅ disponible, 78% score, fallback viable
+
+  // Infraestructura
   embeddings: 'openai/text-embedding-3-small',
   whisper: 'openai/whisper-1',
 } as const

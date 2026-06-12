@@ -6,13 +6,15 @@ import crypto from 'crypto'
 
 const LeadSchema = z.object({
   sessionId: z.string().uuid(),
-  name: z.string().min(1).max(200),
+  name: z.string().min(1).max(200).optional(),
   email: z.string().email().max(320),
   company: z.string().max(200).optional(),
   phone: z.string().max(50).optional(),
-  privacyAccepted: z.literal(true),
-  privacyVersion: z.string().default('1.0'),
+  privacyAccepted: z.boolean().default(true),
+  privacyVersion: z.string().default('2.0'),
   sourceUrl: z.string().url().optional(),
+  contactPreference: z.enum(['whatsapp', 'call', 'email']).optional(),
+  leadScore: z.number().int().min(0).max(20).optional(),
 })
 
 /**
@@ -47,7 +49,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
     }
 
-    const { sessionId, name, email, company, phone, privacyVersion, sourceUrl } = parsed.data
+    const { sessionId, name, email, company, phone, privacyVersion, sourceUrl, contactPreference, leadScore } = parsed.data
 
     // Cifrar PII
     const encryptedEmail = encrypt(email)
@@ -57,7 +59,7 @@ export async function POST(req: NextRequest) {
     const leadRows = await db`
       INSERT INTO widget_leads ${db({
         session_id: sessionId,
-        name,
+        name: name ?? null,
         email: encryptedEmail,
         company: company ?? null,
         phone: encryptedPhone,
@@ -65,6 +67,8 @@ export async function POST(req: NextRequest) {
         privacy_accepted_at: new Date().toISOString(),
         privacy_version: privacyVersion,
         source_url: sourceUrl ?? null,
+        contact_preference: contactPreference ?? null,
+        lead_score: leadScore ?? 0,
       })}
       RETURNING id
     `

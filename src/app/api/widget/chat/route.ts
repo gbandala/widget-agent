@@ -10,6 +10,7 @@ import { checkGibberish, GIBBERISH_RESPONSE } from '@/lib/security/gibberishGuar
 import { filterPII } from '@/lib/security/piiFilter'
 import { checkRateLimit, checkMessageVelocity } from '@/lib/security/rateLimiter'
 import { db } from '@/lib/db'
+import { sendWelcomeEmail } from '@/lib/email/emailService'
 
 // ---- Token validation cache (60s TTL) ----
 type TokenCacheEntry = {
@@ -143,8 +144,9 @@ function buildSystemPrompt(
   const toneLabel = toneMap[agentConfig.tone] ?? agentConfig.tone
 
   const defaultInstructions = `- Responder preguntas sobre los servicios y capacidades de la empresa de manera clara
-- Detectar interés genuino del visitante y capturar sus datos de contacto cuando lo muestren
-- Agendar citas cuando el visitante lo solicite`
+- Calificar al visitante con preguntas diagnósticas antes de pedir su correo
+- Capturar el correo conversacionalmente cuando el interés sea claro
+- Agendar citas después de capturar el correo y la preferencia de contacto`
 
   const defaultScope = `Responde únicamente preguntas relacionadas con la empresa, sus servicios y capacidades. Si la pregunta es completamente ajena, declina cordialmente.`
 
@@ -155,7 +157,7 @@ Tono: ${toneLabel}.${agentConfig.useEmojis ? '' : '\nNo uses emojis en ninguna r
 ESTILO DE RESPUESTA:
 - Sé breve y directo: responde exactamente lo que se preguntó
 - Máximo 3-4 líneas por respuesta salvo que el usuario pida más detalle
-- Termina con UNA sola pregunta de seguimiento relevante, no múltiples
+- Termina con UNA sola pregunta de seguimiento relevante, nunca múltiples
 
 TU MISIÓN:
 ${agentConfig.instructions ?? defaultInstructions}
@@ -171,21 +173,37 @@ PREGUNTAS SIN RESPUESTA:
 REGLAS DE PRIVACIDAD:
 - Nunca inventes datos de contacto de personas
 - Los datos capturados del usuario son confidenciales
-- No menciones costos exactos sin antes ofrecer una sesión de descubrimiento
+- No menciones costos exactos sin antes ofrecer una sesión de diagnóstico
 
 MENSAJES SIN SENTIDO:
-- Si el mensaje no tiene sentido o es gibberish (ej: "miau", "gogodada", "xd", sonidos, palabras inventadas), responde únicamente: "¿Tienes alguna pregunta? Con gusto te ayudo." — sin más.
+- Si el mensaje no tiene sentido o es gibberish, responde únicamente: "¿Tienes alguna pregunta? Con gusto te ayudo."
 
-SEÑALES DE INTERÉS GENUINO (activa captureContact):
-- Preguntas sobre precios, proceso de trabajo, tiempos
-- "me interesa", "quiero empezar", "quiero una propuesta", "cómo los contrato"
-- Segunda o tercera pregunta de seguimiento sobre el mismo tema
+SISTEMA DE CALIFICACIÓN — acumula señales mentalmente antes de pedir el correo:
++3 Menciona "todo depende de mí", "no crece", "trabajo mucho y no avanzo", "si me voy se para"
++2 Tiene clientes activos y más de 18 meses operando (negocio con tracción)
++2 Es el dueño o tomador de decisiones
++2 Pregunta por precios, proceso, tiempos, o cómo contratar
++1 Hace segunda o tercera pregunta sobre el mismo tema
++1 Señal de urgencia ("necesito resolver esto pronto", "ya no puedo más")
 
-AGENDAMIENTO DE CITA (después de captureContact exitoso):
-- Una vez capturado el contacto, ofrece agendar una sesión de diagnóstico de 30 minutos
-- Usa getAvailableSlots para consultar disponibilidad antes de proponer
-- Cuando el usuario acepte agendar, activa bookAppointment para que elija el horario
-- Si getAvailableSlots no retorna slots, di: "En este momento no veo horarios disponibles. Escríbenos a contacto@clariifica.com y agendamos directamente."
+Pide el correo SOLO cuando el score acumulado llegue a 5 o más.
+Si el score es bajo, sigue con preguntas diagnósticas: ¿Cuánto tiempo lleva el negocio? ¿El negocio funciona sin ti? ¿Cuál es el problema que más te frena?
+
+CAPTURA DE CORREO — cómo hacerlo:
+- Nunca muestres un formulario. Pregunta en el chat de forma natural.
+- Ejemplo: "Para mandarte un resumen de lo que hablamos y los próximos pasos, ¿a qué correo te llega bien?"
+- Cuando el usuario escriba su correo, extráelo y llama captureEmail con el correo y un resumen breve de la conversación.
+- captureEmail se ejecuta automáticamente — al terminar confirma y pregunta la preferencia de contacto.
+
+PREFERENCIA DE CONTACTO — después de captureEmail exitoso:
+- Pregunta: "¿Cómo prefieres que te contactemos — WhatsApp, llamada telefónica, o email?"
+- Cuando el usuario responda, llama captureContactPreference con la preferencia y el número si es WhatsApp.
+- Si eligió WhatsApp: pide el número si no lo ha dado.
+
+AGENDAMIENTO — después de captureContactPreference:
+- Ofrece agendar una sesión de diagnóstico de 30 minutos sin costo.
+- Usa getAvailableSlots para ver disponibilidad, luego bookAppointment para que elija el horario.
+- Si no hay slots: "En este momento no tengo horarios disponibles. Te contactaremos pronto en el canal que elegiste."
 ${kbContext ? `\nCONOCIMIENTO BASE:\n${kbContext}` : ''}
 ${landingContext ? `\n${landingContext}` : ''}
 Cuando refieras a contenido de la página, indica en qué sección está.`
@@ -316,17 +334,74 @@ export async function POST(req: NextRequest) {
 
     // 7. Tools disponibles
     const tools = {
-      captureContact: tool({
-        description: 'Solicita los datos de contacto del visitante cuando muestra interés genuino. SOLO usar cuando el visitante muestre interés claro en los servicios.',
+      captureEmail: tool({
+        description: 'Guarda el correo del visitante y le envía un email de bienvenida con resumen y aviso de privacidad. Llamar cuando el visitante haya dado su correo en el chat y el score de calificación sea suficiente.',
         inputSchema: z.object({
-          reason: z.string().describe('Breve razón por la que se solicita el contacto'),
-          message: z.string().describe('Mensaje amigable para presentar al usuario antes del formulario'),
+          email: z.string().email().describe('Correo electrónico que el visitante escribió en el chat'),
+          conversationSummary: z.string().describe('Resumen breve (2-3 oraciones) de lo que dijo el visitante sobre su negocio y su problema principal'),
+          leadScore: z.number().int().min(0).max(20).describe('Score de calificación acumulado según las señales detectadas'),
         }),
-        // Sin execute — requiere confirmación manual del usuario en el frontend
+        execute: async ({ email, conversationSummary, leadScore }) => {
+          try {
+            const rows = await db`
+              INSERT INTO widget_leads ${db({
+                session_id: sessionId ?? null,
+                email: email,
+                privacy_accepted: true,
+                privacy_accepted_at: new Date().toISOString(),
+                privacy_version: '2.0',
+                lead_score: leadScore,
+                source_url: sourceUrl || null,
+              })}
+              RETURNING id
+            `
+            const leadId = rows[0]?.id as string | undefined
+            if (sessionId && leadId) {
+              await db`
+                UPDATE widget_sessions
+                SET lead_id = ${leadId},
+                    intent_detected = 'lead_captured',
+                    last_active = ${new Date().toISOString()}
+                WHERE id = ${sessionId}
+              `
+            }
+            // Enviar email de bienvenida (best-effort, no bloquea)
+            sendWelcomeEmail({ to: email, conversationSummary, sessionId: sessionId ?? '' })
+              .catch(err => console.error('[captureEmail] email error:', err))
+
+            return { success: true, leadId: leadId ?? null }
+          } catch (err) {
+            console.error('[captureEmail]', err)
+            return { success: false, error: 'No se pudo guardar el correo' }
+          }
+        },
+      }),
+
+      captureContactPreference: tool({
+        description: 'Guarda la preferencia de contacto del visitante (WhatsApp, llamada, o email) después de capturar el correo.',
+        inputSchema: z.object({
+          preference: z.enum(['whatsapp', 'call', 'email']).describe('Cómo prefiere ser contactado'),
+          phone: z.string().optional().describe('Número de WhatsApp o teléfono si aplica'),
+        }),
+        execute: async ({ preference, phone }) => {
+          try {
+            if (sessionId) {
+              await db`
+                UPDATE widget_leads
+                SET contact_preference = ${preference},
+                    phone = ${phone ?? null}
+                WHERE session_id = ${sessionId}
+              `
+            }
+            return { success: true }
+          } catch {
+            return { success: false }
+          }
+        },
       }),
 
       getAvailableSlots: tool({
-        description: 'Obtiene los horarios disponibles para una cita de consultoría',
+        description: 'Obtiene los horarios disponibles para una cita de diagnóstico de 30 minutos',
         inputSchema: z.object({
           preferredDate: z.string().optional().describe('Fecha preferida en formato YYYY-MM-DD'),
         }),
@@ -344,13 +419,13 @@ export async function POST(req: NextRequest) {
       }),
 
       bookAppointment: tool({
-        description: 'Crea una cita en el calendario una vez que el usuario eligió un horario',
+        description: 'Activa el selector de cita en el chat para que el visitante elija un horario específico',
         inputSchema: z.object({
           slotStart: z.string().describe('ISO 8601 inicio del slot elegido'),
           slotEnd: z.string().describe('ISO 8601 fin del slot elegido'),
-          notes: z.string().optional().describe('Notas del tema a tratar'),
+          notes: z.string().optional().describe('Tema a tratar en la sesión'),
         }),
-        // Sin execute — requiere que el lead ya esté capturado
+        // Sin execute — muestra el AppointmentPicker en el cliente
       }),
 
       logUnansweredQuestion: tool({

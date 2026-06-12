@@ -4,11 +4,9 @@ import { useState, useEffect, useRef, FormEvent } from 'react'
 import type { UIMessage } from 'ai'
 import { useWidgetChat } from '../hooks/useWidgetChat'
 import { ChatBubble } from './ChatBubble'
-import { PrivacyConsent } from './PrivacyConsent'
 import { AppointmentPicker } from './AppointmentPicker'
 import { AudioInput } from './AudioInput'
 import { SummaryDownload } from './SummaryDownload'
-import type { LeadData } from '../types'
 
 interface WidgetLauncherProps {
   token: string
@@ -66,7 +64,7 @@ export function WidgetLauncher({
     if (initialSourceUrl) return initialSourceUrl
     return typeof window !== 'undefined' ? window.location.href : ''
   })
-  const [leadData, setLeadData] = useState<{ id: string; name: string; email: string } | null>(null)
+  const [leadData, setLeadData] = useState<{ id: string; email: string } | null>(null)
   const [dismissedToolCalls, setDismissedToolCalls] = useState<Set<string>>(new Set())
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -78,19 +76,13 @@ export function WidgetLauncher({
 
   const isLoading = status === 'submitted' || status === 'streaming'
 
-  // Detect pending tool calls (no-execute tools waiting for client confirmation)
-  const pendingCaptureContact = findPendingTool(messages, 'tool-captureContact')
+  // captureEmail y captureContactPreference se ejecutan server-side, no necesitan UI aquí.
+  // bookAppointment sí requiere UI del cliente.
   const pendingBookAppointment = findPendingTool(messages, 'tool-bookAppointment')
-
-  const showConsentForm =
-    !!pendingCaptureContact &&
-    !dismissedToolCalls.has(pendingCaptureContact.toolCallId) &&
-    !leadData
 
   const showAppointmentForm =
     !!pendingBookAppointment &&
     !dismissedToolCalls.has(pendingBookAppointment.toolCallId) &&
-    !!leadData &&
     !!sessionId
 
   const hasEnoughMessages = messages.filter(m => m.role === 'user').length >= 2
@@ -98,7 +90,7 @@ export function WidgetLauncher({
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, showConsentForm, showAppointmentForm])
+  }, [messages, showAppointmentForm])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -106,36 +98,6 @@ export function WidgetLauncher({
     const text = input.trim()
     setInput('')
     sendMessage({ text })
-  }
-
-  const handleLeadSubmit = async (data: LeadData) => {
-    if (!pendingCaptureContact) return
-    const res = await fetch('/api/widget/leads', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ ...data, sessionId }),
-    })
-    if (!res.ok) throw new Error('Error guardando lead')
-    const { leadId } = await res.json()
-    setLeadData({ id: leadId, name: data.name, email: data.email })
-    addToolResult({
-      tool: 'captureContact',
-      toolCallId: pendingCaptureContact.toolCallId,
-      output: { success: true, name: data.name, email: data.email, leadId },
-    })
-  }
-
-  const handleConsentCancel = () => {
-    if (!pendingCaptureContact) return
-    dismissTool(pendingCaptureContact.toolCallId)
-    addToolResult({
-      tool: 'captureContact',
-      toolCallId: pendingCaptureContact.toolCallId,
-      output: { success: false, reason: 'user_declined' },
-    })
   }
 
   const handleBooked = (meetLink: string, slotLabel: string) => {
@@ -221,20 +183,12 @@ export function WidgetLauncher({
             ))}
 
             {/* Inline tool UIs */}
-            {showConsentForm && (
-              <PrivacyConsent
-                message="Para enviarte información personalizada y dar seguimiento, necesito algunos datos:"
-                onSubmit={handleLeadSubmit}
-                onCancel={handleConsentCancel}
-              />
-            )}
-
-            {showAppointmentForm && sessionId && leadData && (
+            {showAppointmentForm && sessionId && (
               <AppointmentPicker
                 sessionId={sessionId}
-                leadId={leadData.id}
-                leadName={leadData.name}
-                leadEmail={leadData.email}
+                leadId={leadData?.id ?? sessionId}
+                leadName=""
+                leadEmail=""
                 onBooked={handleBooked}
                 onCancel={handleAppointmentCancel}
               />
