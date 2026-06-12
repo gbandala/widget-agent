@@ -12,7 +12,7 @@ export const kbService = {
 
     const rows = await db`
       SELECT * FROM search_kb(
-        ${queryEmbedding}::vector,
+        ${JSON.stringify(queryEmbedding)}::vector,
         ${threshold}::float8,
         ${limit}::int,
         ${tokenId ?? null}::uuid

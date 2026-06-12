@@ -397,7 +397,8 @@ export async function POST(req: NextRequest) {
     return result.toUIMessageStreamResponse()
   } catch (err) {
     const errMessage = String(err)
-    const errType = errMessage.includes('quota') || errMessage.includes('429')
+    // Nota: '429' como string exacto, no substring (evita falso positivo con código Postgres 42601)
+    const errType = errMessage.includes('quota') || errMessage.match(/\b429\b/)
       ? 'quota_exceeded'
       : errMessage.includes('timeout') || errMessage.includes('ECONNREFUSED')
         ? 'connection_error'
