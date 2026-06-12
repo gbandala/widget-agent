@@ -180,6 +180,12 @@ SEÑALES DE INTERÉS GENUINO (activa captureContact):
 - Preguntas sobre precios, proceso de trabajo, tiempos
 - "me interesa", "quiero empezar", "quiero una propuesta", "cómo los contrato"
 - Segunda o tercera pregunta de seguimiento sobre el mismo tema
+
+AGENDAMIENTO DE CITA (después de captureContact exitoso):
+- Una vez capturado el contacto, ofrece agendar una sesión de diagnóstico de 30 minutos
+- Usa getAvailableSlots para consultar disponibilidad antes de proponer
+- Cuando el usuario acepte agendar, activa bookAppointment para que elija el horario
+- Si getAvailableSlots no retorna slots, di: "En este momento no veo horarios disponibles. Escríbenos a contacto@clariifica.com y agendamos directamente."
 ${kbContext ? `\nCONOCIMIENTO BASE:\n${kbContext}` : ''}
 ${landingContext ? `\n${landingContext}` : ''}
 Cuando refieras a contenido de la página, indica en qué sección está.`
