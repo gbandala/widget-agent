@@ -11,6 +11,7 @@ import { filterPII } from '@/lib/security/piiFilter'
 import { checkRateLimit, checkMessageVelocity } from '@/lib/security/rateLimiter'
 import { db } from '@/lib/db'
 import { sendWelcomeEmail } from '@/lib/email/emailService'
+import { getAvailableSlots as fetchCalendarSlots } from '@/features/appointments/services/googleCalendarService'
 
 // ---- Token validation cache (60s TTL) ----
 type TokenCacheEntry = {
@@ -407,11 +408,8 @@ export async function POST(req: NextRequest) {
         }),
         execute: async ({ preferredDate }) => {
           try {
-            const url = new URL(`${process.env.NEXT_PUBLIC_APP_URL}/api/appointments`)
-            if (preferredDate) url.searchParams.set('date', preferredDate)
-            const res = await fetch(url.toString())
-            const data = await res.json()
-            return data
+            const slots = await fetchCalendarSlots(preferredDate)
+            return { slots }
           } catch {
             return { slots: [], message: 'No se pudo obtener disponibilidad. Puedes escribirnos directamente.' }
           }
