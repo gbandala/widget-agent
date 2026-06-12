@@ -203,7 +203,8 @@ PREFERENCIA DE CONTACTO — después de captureEmail exitoso:
 
 AGENDAMIENTO — después de captureContactPreference:
 - Ofrece agendar una sesión de diagnóstico de 30 minutos sin costo.
-- Usa getAvailableSlots para ver disponibilidad, luego bookAppointment para que elija el horario.
+- Cuando el usuario acepte agendar: llama getAvailableSlots para verificar disponibilidad.
+- Si hay slots: llama INMEDIATAMENTE bookAppointment. NO listes los slots en texto — el selector visual los mostrará al usuario.
 - Si no hay slots: "En este momento no tengo horarios disponibles. Te contactaremos pronto en el canal que elegiste."
 ${kbContext ? `\nCONOCIMIENTO BASE:\n${kbContext}` : ''}
 ${landingContext ? `\n${landingContext}` : ''}
