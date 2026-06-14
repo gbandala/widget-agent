@@ -3,15 +3,15 @@ import {
   getAvailableSlots,
   bookAppointment,
 } from '@/features/appointments/services/googleCalendarService'
+import { db } from '@/lib/db'
 import { z } from 'zod'
 
 const BookSchema = z.object({
   sessionId: z.string().uuid(),
-  leadId: z.string().uuid(),
   slotStart: z.string().datetime(),
   slotEnd: z.string().datetime(),
-  leadName: z.string().min(1),
-  leadEmail: z.string().email(),
+  leadName: z.string().optional().transform(v => v || 'Visitante'),
+  leadEmail: z.string().email().optional(),
   notes: z.string().optional(),
 })
 
@@ -38,14 +38,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
     }
 
-    const { sessionId, leadId, slotStart, slotEnd, leadName, leadEmail, notes } = parsed.data
+    const { sessionId, slotStart, slotEnd, leadName, leadEmail, notes } = parsed.data
+
+    // Resolver lead_id y email desde la sesión (el cliente no es autoritativo en esto)
+    const [session] = await db<{ lead_id: string | null }[]>`
+      SELECT lead_id FROM widget_sessions WHERE id = ${sessionId}
+    `
+    const leadId = session?.lead_id
+    if (!leadId) {
+      return NextResponse.json(
+        { error: 'No hay lead asociado a esta sesión. Completa el formulario primero.' },
+        { status: 422 }
+      )
+    }
+
+    // Obtener email del lead si el cliente no lo envió
+    let resolvedEmail = leadEmail
+    if (!resolvedEmail) {
+      const [lead] = await db<{ email: string }[]>`
+        SELECT email FROM widget_leads WHERE id = ${leadId}
+      `
+      resolvedEmail = lead?.email
+    }
+    if (!resolvedEmail) {
+      return NextResponse.json({ error: 'Email del lead no encontrado' }, { status: 422 })
+    }
+
     const result = await bookAppointment({
       sessionId,
       leadId,
       startTime: slotStart,
       endTime: slotEnd,
       leadName,
-      leadEmail,
+      leadEmail: resolvedEmail,
       notes,
     })
 

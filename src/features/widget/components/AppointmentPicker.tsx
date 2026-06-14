@@ -5,7 +5,6 @@ import type { AppointmentSlot } from '@/features/appointments/types'
 
 interface AppointmentPickerProps {
   sessionId: string
-  leadId: string
   leadName: string
   leadEmail: string
   onBooked: (meetLink: string, slotLabel: string) => void
@@ -14,7 +13,6 @@ interface AppointmentPickerProps {
 
 export function AppointmentPicker({
   sessionId,
-  leadId,
   leadName,
   leadEmail,
   onBooked,
@@ -59,11 +57,10 @@ export function AppointmentPicker({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId,
-          leadId,
           slotStart: selected.start,
           slotEnd: selected.end,
-          leadName,
-          leadEmail,
+          leadName: leadName || undefined,
+          leadEmail: leadEmail || undefined,
           notes: notes || undefined,
         }),
       })

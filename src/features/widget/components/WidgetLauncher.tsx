@@ -31,7 +31,7 @@ function generateAnonId(): string {
   return id
 }
 
-type PendingToolPart = { type: string; toolCallId: string; state: string }
+type PendingToolPart = { type: string; toolCallId: string; state: string; input?: Record<string, unknown> }
 
 // In AI SDK v6, tool parts have type `tool-{toolName}` and properties directly on the part.
 // A "pending" tool call is one that has been called (input-available) but not yet resolved.
@@ -46,6 +46,19 @@ function findPendingTool(messages: UIMessage[], toolType: string): PendingToolPa
     }
   }
   return null
+}
+
+// Extrae el email capturado por captureEmail (auto-exec server-side) del historial de mensajes.
+function findCapturedEmail(messages: UIMessage[]): string {
+  for (const msg of messages) {
+    for (const part of msg.parts ?? []) {
+      if (part.type === 'tool-captureEmail') {
+        const email = (part as PendingToolPart).input?.email
+        if (typeof email === 'string' && email) return email
+      }
+    }
+  }
+  return ''
 }
 
 export function WidgetLauncher({
@@ -186,9 +199,11 @@ export function WidgetLauncher({
             {showAppointmentForm && sessionId && (
               <AppointmentPicker
                 sessionId={sessionId}
-                leadId={leadData?.id ?? sessionId}
-                leadName=""
-                leadEmail=""
+                leadName={(pendingBookAppointment?.input?.leadName as string) ?? ''}
+                leadEmail={
+                  (pendingBookAppointment?.input?.leadEmail as string) ||
+                  findCapturedEmail(messages)
+                }
                 onBooked={handleBooked}
                 onCancel={handleAppointmentCancel}
               />

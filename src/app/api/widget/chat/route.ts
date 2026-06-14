@@ -189,11 +189,30 @@ SISTEMA DE CALIFICACIÓN — acumula señales mentalmente antes de pedir el corr
 Pide el correo SOLO cuando el score acumulado llegue a 5 o más.
 Si el score es bajo, sigue con preguntas diagnósticas: ¿Cuánto tiempo lleva el negocio? ¿El negocio funciona sin ti? ¿Cuál es el problema que más te frena?
 
-CAPTURA DE CORREO — cómo hacerlo:
-- Nunca muestres un formulario. Pregunta en el chat de forma natural.
-- Ejemplo: "Para mandarte un resumen de lo que hablamos y los próximos pasos, ¿a qué correo te llega bien?"
-- Cuando el usuario escriba su correo, extráelo y llama captureEmail con el correo y un resumen breve de la conversación.
+CAPTURA DE NOMBRE Y CORREO:
+- Antes de pedir el correo, pregunta el nombre si no lo dijo: "¿Cómo te llamas?"
+- Luego el correo: "Y ¿a qué correo te llega bien, [nombre]?"
+- Si ya mencionó su nombre en la conversación, no lo vuelvas a pedir — úsalo directamente.
+- Cuando el usuario escriba su correo, llama captureEmail con todos los datos disponibles.
 - captureEmail se ejecuta automáticamente — al terminar confirma y pregunta la preferencia de contacto.
+
+EN captureEmail, además del correo y resumen, genera:
+- leadName: nombre del prospecto
+- preDiagnostic: objeto con tu estimado de la situación basado en la conversación:
+  - zeroDimension: dimensión que más limita al negocio (financiero/temporal/cognitivo/relacional)
+  - zeroDimensionLabel: frase corta en lenguaje simple para el dueño, sin jerga técnica. Describe el problema que frena el negocio. Ejemplo: "Todo depende de ti para que el negocio funcione" o "El dinero que entra no alcanza para crecer". NO uses términos como "Cero Estratégico", "Excedente" ni lenguaje del framework.
+  - dimensionLevels: nivel de cada dimensión (bajo/medio/alto) según lo que mencionó
+  - top3Risks: 3 señales de alerta específicas a su caso, en lenguaje del dueño (no genéricas, no técnicas)
+  - transformationIn90Days: 3 resultados concretos posibles en 90 días, en lenguaje tangible ("liberar X horas", "tener un proceso que funciona sin ti", etc.)
+
+LENGUAJE CON EL DUEÑO DE NEGOCIO:
+Cuando hables con el usuario, adapta tu vocabulario a su nivel de madurez. Para dueños sin conocimiento del framework usa siempre los equivalentes simples:
+- "Financiero" → "margen real" o "cuánto queda de verdad"
+- "Temporal" → "si el negocio funciona sin ti" o "sistema vs. presencia"
+- "Cognitivo" → "espacio para pensar y decidir" o "claridad para decidir"
+- "Relacional" → "tu red trabajando para ti" o "red activa"
+- Nunca uses: "Cero Estratégico", "Excedente Estratégico", "J1/J2/J3", "composición" en sentido técnico.
+Habla siempre como si fuera la primera vez que el dueño escucha sobre su negocio desde afuera.
 
 PREFERENCIA DE CONTACTO — después de captureEmail exitoso:
 - Pregunta: "¿Cómo prefieres que te contactemos — WhatsApp, llamada telefónica, o email?"
@@ -203,6 +222,7 @@ PREFERENCIA DE CONTACTO — después de captureEmail exitoso:
 AGENDAMIENTO — después de captureContactPreference:
 - Ofrece agendar una sesión de diagnóstico de 30 minutos sin costo.
 - Cuando el usuario acepte agendar: llama bookAppointment INMEDIATAMENTE. No preguntes nada más antes.
+- En bookAppointment, pasa leadEmail con el correo que capturaste antes. Si el usuario dio su nombre, pásalo en leadName.
 - bookAppointment mostrará un selector visual con los horarios disponibles — nunca los listes en texto.
 - No hay que verificar disponibilidad por tu cuenta; el selector se encarga de eso.
 ${kbContext ? `\nCONOCIMIENTO BASE:\n${kbContext}` : ''}
@@ -336,18 +356,32 @@ export async function POST(req: NextRequest) {
     // 7. Tools disponibles
     const tools = {
       captureEmail: tool({
-        description: 'Guarda el correo del visitante y le envía un email de bienvenida con resumen y aviso de privacidad. Llamar cuando el visitante haya dado su correo en el chat y el score de calificación sea suficiente.',
+        description: 'Guarda el correo del visitante y le envía un email de bienvenida personalizado con resumen, pre-diagnóstico y aviso de privacidad. Llamar cuando el visitante haya dado su correo y el score sea suficiente.',
         inputSchema: z.object({
           email: z.string().email().describe('Correo electrónico que el visitante escribió en el chat'),
+          leadName: z.string().optional().describe('Nombre del prospecto si lo mencionó en la conversación'),
           conversationSummary: z.string().describe('Resumen breve (2-3 oraciones) de lo que dijo el visitante sobre su negocio y su problema principal'),
           leadScore: z.number().int().min(0).max(20).describe('Score de calificación acumulado según las señales detectadas'),
+          preDiagnostic: z.object({
+            zeroDimension: z.enum(['financiero','temporal','cognitivo','relacional']).describe('Dimensión del Excedente que probablemente está en cero'),
+            zeroDimensionLabel: z.string().describe('Frase corta en lenguaje simple para el dueño, sin jerga técnica. Ej: "Todo depende de ti para que el negocio funcione"'),
+            dimensionLevels: z.object({
+              financiero: z.enum(['bajo','medio','alto']),
+              temporal: z.enum(['bajo','medio','alto']),
+              cognitivo: z.enum(['bajo','medio','alto']),
+              relacional: z.enum(['bajo','medio','alto']),
+            }).describe('Nivel estimado de cada dimensión del Excedente'),
+            top3Risks: z.tuple([z.string(), z.string(), z.string()]).describe('3 señales de alerta específicas al caso del prospecto'),
+            transformationIn90Days: z.tuple([z.string(), z.string(), z.string()]).describe('3 KPIs concretos de mejora posibles en los primeros 90 días'),
+          }).optional().describe('Pre-diagnóstico estimado basado en la conversación'),
         }),
-        execute: async ({ email, conversationSummary, leadScore }) => {
+        execute: async ({ email, leadName, conversationSummary, leadScore, preDiagnostic }) => {
           try {
             const rows = await db`
               INSERT INTO widget_leads ${db({
                 session_id: sessionId ?? null,
                 email: email,
+                name: leadName ?? null,
                 privacy_accepted: true,
                 privacy_accepted_at: new Date().toISOString(),
                 privacy_version: '2.0',
@@ -366,9 +400,17 @@ export async function POST(req: NextRequest) {
                 WHERE id = ${sessionId}
               `
             }
+            // Alternar variante A/B por sesión para prueba social
+            const variant = leadId && leadId.charCodeAt(0) % 2 === 0 ? 'B' : 'A'
             // Enviar email de bienvenida (best-effort, no bloquea)
-            sendWelcomeEmail({ to: email, conversationSummary, sessionId: sessionId ?? '' })
-              .catch(err => console.error('[captureEmail] email error:', err))
+            sendWelcomeEmail({
+              to: email,
+              leadName: leadName ?? undefined,
+              conversationSummary,
+              sessionId: sessionId ?? '',
+              preDiagnostic: preDiagnostic as import('@/lib/email/emailService').PreDiagnostic | undefined,
+              variant,
+            }).catch(err => console.error('[captureEmail] email error:', err))
 
             return { success: true, leadId: leadId ?? null }
           } catch (err) {
@@ -405,6 +447,8 @@ export async function POST(req: NextRequest) {
         description: 'Muestra el selector de cita al usuario para que elija fecha y horario. Llama esto cuando el usuario quiera agendar — no necesitas saber los horarios de antemano, el selector los carga.',
         inputSchema: z.object({
           notes: z.string().optional().describe('Tema o contexto para la sesión'),
+          leadEmail: z.string().email().optional().describe('Correo del lead capturado previamente con captureEmail'),
+          leadName: z.string().optional().describe('Nombre del lead si fue mencionado en la conversación'),
         }),
         // Sin execute — muestra el AppointmentPicker en el cliente (human-in-the-loop)
       }),
