@@ -125,20 +125,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Wait for VPS ready
-        run: |
-          for i in $(seq 1 90); do
-            status=$(curl -s -o /dev/null -w "%{http_code}" https://widget.clariifica.com/api/widget/chat)
-            if [ "$status" = "405" ]; then
-              echo "VPS ready after $((i * 10))s (HTTP $status)"
-              exit 0
-            fi
-            echo "Attempt $i/90: HTTP $status — retrying in 10s..."
-            sleep 10
-          done
-          echo "VPS not ready after 15 minutes"
-          exit 1
-
       - name: API smoke tests
         env:
           WIDGET_TEST_TOKEN: ${{ secrets.WIDGET_TEST_TOKEN }}
