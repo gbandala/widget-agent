@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireWidgetToken } from '@/lib/security/widgetTokenValidator'
+import { encryptPii } from '@/lib/security/piiCrypto'
 import { z } from 'zod'
-import crypto from 'crypto'
 
 const LeadSchema = z.object({
   sessionId: z.string().uuid(),
@@ -17,24 +17,7 @@ const LeadSchema = z.object({
   leadScore: z.number().int().min(0).max(20).optional(),
 })
 
-/**
- * Cifra un valor con AES-256-CBC.
- * Requiere PII_ENCRYPTION_KEY en producción.
- */
-function encrypt(text: string): string {
-  const key = process.env.PII_ENCRYPTION_KEY
-  if (!key) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('PII_ENCRYPTION_KEY no configurada — no se puede almacenar datos personales')
-    }
-    console.warn('[leads] PII_ENCRYPTION_KEY no configurada — datos guardados sin cifrar (solo dev)')
-    return text
-  }
-  const iv = crypto.randomBytes(16)
-  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(key.slice(0, 32)), iv)
-  const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()])
-  return iv.toString('hex') + ':' + encrypted.toString('hex')
-}
+const QUALIFIED_SCORE_THRESHOLD = 5
 
 /** POST /api/widget/leads — Guarda un lead con datos cifrados */
 export async function POST(req: NextRequest) {
@@ -52,8 +35,8 @@ export async function POST(req: NextRequest) {
     const { sessionId, name, email, company, phone, privacyVersion, sourceUrl, contactPreference, leadScore } = parsed.data
 
     // Cifrar PII
-    const encryptedEmail = encrypt(email)
-    const encryptedPhone = phone ? encrypt(phone) : null
+    const encryptedEmail = encryptPii(email)
+    const encryptedPhone = phone ? encryptPii(phone) : null
 
     // Crear lead
     const leadRows = await db`
@@ -83,6 +66,29 @@ export async function POST(req: NextRequest) {
           last_active = ${new Date().toISOString()}
       WHERE id = ${sessionId}
     `
+
+    // Promover a CRM si el score supera el umbral de calificación
+    const score = leadScore ?? 0
+    if (score >= QUALIFIED_SCORE_THRESHOLD) {
+      try {
+        await db`
+          INSERT INTO contacts
+            (widget_lead_id, nombre, empresa, email_enc, telefono_enc,
+             origen, preferred_contact, bant_score, etapa)
+          VALUES
+            (${leadId}, ${name ?? 'Sin nombre'}, ${company ?? null},
+             ${encryptedEmail}, ${encryptedPhone ?? null},
+             'widget', ${contactPreference ?? null}, ${score}, 'T0')
+          ON CONFLICT (widget_lead_id) DO UPDATE
+            SET bant_score       = EXCLUDED.bant_score,
+                preferred_contact = EXCLUDED.preferred_contact,
+                updated_at        = NOW()
+        `
+      } catch (crmErr) {
+        // No bloquear la captura del lead si el CRM falla
+        console.error('[leads → crm]', crmErr)
+      }
+    }
 
     return NextResponse.json({ leadId }, { status: 201 })
   } catch (err) {
