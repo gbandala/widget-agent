@@ -365,7 +365,7 @@ export function KBAdmin() {
   }, [])
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
   useEffect(() => { load() }, [filterTokenId]) // re-fetch when filter changes
 
   const handleCreate = async (data: Partial<KBEntry>) => {

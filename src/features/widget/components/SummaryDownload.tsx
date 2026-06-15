@@ -37,7 +37,7 @@ export function SummaryDownload({ sessionId, token, botName = 'Asistente' }: Sum
       const res = await fetch(`/api/widget/summary?sessionId=${sessionId}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       })
-      const { summary, messages } = await res.json() as {
+      const { summary } = await res.json() as {
         summary: string | null
         messages: Message[]
       }

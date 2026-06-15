@@ -20,6 +20,7 @@ export function ChatBubble({ message, botName, botAvatarUrl }: ChatBubbleProps) 
       {!isUser && (
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center overflow-hidden">
           {botAvatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={botAvatarUrl} alt={botName} className="w-full h-full object-cover" />
           ) : (
             <span className="text-white text-xs font-bold">{botName[0]}</span>

@@ -83,7 +83,6 @@ export function WidgetLauncher({
     if (initialSourceUrl) return initialSourceUrl
     return typeof window !== 'undefined' ? window.location.href : ''
   })
-  const [leadData, setLeadData] = useState<{ id: string; email: string } | null>(null)
   const [dismissedToolCalls, setDismissedToolCalls] = useState<Set<string>>(new Set())
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -157,6 +156,7 @@ export function WidgetLauncher({
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center overflow-hidden">
                 {botAvatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={botAvatarUrl} alt={botName} className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-white text-sm font-bold">{botName[0]}</span>
