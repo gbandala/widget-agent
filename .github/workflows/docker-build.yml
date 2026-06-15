@@ -103,7 +103,9 @@ jobs:
               ghcr.io/${{ github.repository }}:latest
             echo "Waiting for container to be ready..."
             for i in $(seq 1 36); do
-              status=$(docker exec widget-agent curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/widget/chat 2>/dev/null || echo "000")
+              status=$(docker exec widget-agent node -e \
+                "const h=require('http');h.get('http://localhost:3000/api/widget/chat',r=>{process.stdout.write(String(r.statusCode));process.exit(0)}).on('error',()=>process.exit(1));" \
+                2>/dev/null || echo "000")
               if [ "$status" = "405" ]; then
                 echo "Container ready after $((i * 5))s (HTTP $status)"
                 exit 0
