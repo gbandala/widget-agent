@@ -91,6 +91,22 @@ function caseStudyBlock(): string {
     </td></tr>`
 }
 
+function ctaBlock(): string {
+  return `
+    <tr><td style="background:#fff;padding:24px 36px 0">
+      <table cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+          <td style="padding-right:10px;vertical-align:top;width:50%">
+            <a href="https://wa.link/clariifica" style="display:block;background:#25D366;color:#fff;text-decoration:none;padding:13px 18px;border-radius:8px;font-size:14px;font-weight:700;text-align:center;line-height:1.3">💬 Estoy listo —<br>hablar con el equipo</a>
+          </td>
+          <td style="vertical-align:top;width:50%">
+            <a href="https://clariifica.com?chat=open" style="display:block;background:#f8fafc;color:#0891B2;text-decoration:none;padding:13px 18px;border-radius:8px;font-size:14px;font-weight:700;text-align:center;line-height:1.3;border:2px solid #0891B2">Todavía tengo dudas —<br>seguir con Serena</a>
+          </td>
+        </tr>
+      </table>
+    </td></tr>`
+}
+
 function privacyFooter(): string {
   return `
     <tr><td style="background:#fff;padding:20px 36px 0">
@@ -167,15 +183,7 @@ function buildVariantA(summary: string, dx?: PreDiagnostic, firstName?: string):
       <p style="margin:0;font-size:14px;color:#94A3B8">Aquí tienes el resumen de tu conversación${dx ? ' y un pre-diagnóstico de tu situación' : ''}.</p>
     </td></tr>`
 
-  const cta = `
-    <tr><td style="background:#fff;padding:24px 36px 0">
-      <p style="margin:0 0 14px;font-size:14px;color:#334155;line-height:1.6">
-        El diagnóstico completo toma <strong>30 minutos</strong>. Al terminar tienes el mapa exacto de dónde está el techo, qué dimensión lo sostiene, y cuál es la primera palanca para moverlo.
-      </p>
-      <a href="https://clariifica.com" style="display:inline-block;background:#0891B2;color:#fff;text-decoration:none;padding:13px 28px;border-radius:8px;font-size:15px;font-weight:700">Agendar diagnóstico gratuito →</a>
-    </td></tr>`
-
-  return emailWrapper([header, summaryBlock(summary), dxSection, caseStudyBlock(), cta, privacyFooter()].join(''))
+  return emailWrapper([header, summaryBlock(summary), dxSection, caseStudyBlock(), ctaBlock(), privacyFooter()].join(''))
 }
 
 // ── VARIANTE B — Señales de alerta + costo de inacción ───────────────────────
@@ -223,13 +231,5 @@ function buildVariantB(summary: string, dx?: PreDiagnostic, firstName?: string):
       <p style="margin:0;font-size:14px;color:#94A3B8">Serena detectó patrones en tu conversación. Te los compartimos.</p>
     </td></tr>`
 
-  const cta = `
-    <tr><td style="background:#fff;padding:24px 36px 0">
-      <p style="margin:0 0 14px;font-size:14px;color:#334155;line-height:1.6">
-        El diagnóstico de 30 minutos hace exactamente esto: mapa del techo, primera palanca, hoja de ruta. Sin costo.
-      </p>
-      <a href="https://clariifica.com" style="display:inline-block;background:#1D4ED8;color:#fff;text-decoration:none;padding:13px 28px;border-radius:8px;font-size:15px;font-weight:700">Ver mi diagnóstico completo →</a>
-    </td></tr>`
-
-  return emailWrapper([header, summaryBlock(summary), alertSection, caseStudyBlock(), cta, privacyFooter()].join(''))
+  return emailWrapper([header, summaryBlock(summary), alertSection, caseStudyBlock(), ctaBlock(), privacyFooter()].join(''))
 }

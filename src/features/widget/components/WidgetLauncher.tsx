@@ -70,7 +70,13 @@ export function WidgetLauncher({
   initialSourceUrl,
 }: WidgetLauncherProps) {
   const isEmbed = mode === 'embed'
-  const [isOpen, setIsOpen] = useState(isEmbed)
+  const [isOpen, setIsOpen] = useState(() => {
+    if (isEmbed) return true
+    if (typeof window !== 'undefined') {
+      return new URLSearchParams(window.location.search).get('chat') === 'open'
+    }
+    return false
+  })
   const [input, setInput] = useState('')
   const [anonId] = useState(() => generateAnonId())
   const [sourceUrl] = useState(() => {
