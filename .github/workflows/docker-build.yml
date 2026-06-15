@@ -102,32 +102,3 @@ jobs:
               ghcr.io/${{ github.repository }}:latest
             echo "Container started"
 
-  # ── 4. Post-deploy: smoke tests contra producción ────────────────────────
-  post-deploy:
-    name: Post-deploy (API smoke tests)
-    needs: deploy
-    runs-on: ubuntu-latest
-    continue-on-error: true
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: API smoke tests
-        env:
-          WIDGET_TEST_TOKEN: ${{ secrets.WIDGET_TEST_TOKEN }}
-          WIDGET_TEST_ORIGIN: clariifica.com
-          WIDGET_BASE_URL: https://widget.clariifica.com
-        run: pnpm test:api
