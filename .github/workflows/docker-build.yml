@@ -83,7 +83,6 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          command_timeout: 10m
           script: |
             docker pull ghcr.io/${{ github.repository }}:latest
             docker stop widget-agent 2>/dev/null || true
@@ -101,20 +100,7 @@ jobs:
               --label "traefik.http.services.widget-agent.loadbalancer.server.port=3000" \
               --env-file /etc/widget-agent.env \
               ghcr.io/${{ github.repository }}:latest
-            echo "Waiting for container to be ready..."
-            for i in $(seq 1 36); do
-              status=$(docker exec widget-agent node -e \
-                "const h=require('http');h.get('http://localhost:3000/api/widget/chat',r=>{process.stdout.write(String(r.statusCode));process.exit(0)}).on('error',()=>process.exit(1));" \
-                2>/dev/null || echo "000")
-              if [ "$status" = "405" ]; then
-                echo "Container ready after $((i * 5))s (HTTP $status)"
-                exit 0
-              fi
-              echo "Attempt $i/36: HTTP $status — retrying in 5s..."
-              sleep 5
-            done
-            echo "Container not ready after 3 minutes"
-            exit 1
+            echo "Container started — health check delegated to post-deploy step"
 
   # ── 4. Post-deploy: smoke tests contra producción ────────────────────────
   post-deploy:
@@ -138,18 +124,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Wait for Traefik routing
+      - name: Wait for VPS ready
         run: |
-          for i in $(seq 1 12); do
+          for i in $(seq 1 60); do
             status=$(curl -s -o /dev/null -w "%{http_code}" https://widget.clariifica.com/api/widget/chat)
             if [ "$status" = "405" ]; then
-              echo "Traefik routing ready after $((i * 5))s (HTTP $status)"
+              echo "VPS ready after $((i * 10))s (HTTP $status)"
               exit 0
             fi
-            echo "Attempt $i/12: HTTP $status — retrying in 5s..."
-            sleep 5
+            echo "Attempt $i/60: HTTP $status — retrying in 10s..."
+            sleep 10
           done
-          echo "Traefik not routing after 60s"
+          echo "VPS not ready after 10 minutes"
           exit 1
 
       - name: API smoke tests
