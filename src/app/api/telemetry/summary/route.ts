@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': 'https://demo.clariifica.com',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS })
+}
+
 export async function GET(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get('secret')
   if (secret !== process.env.TELEMETRY_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: CORS_HEADERS })
   }
 
   const [services, securitySummary, topAttackers, lastAccepted, visits, widgetSessions, contacts] =
@@ -137,5 +146,5 @@ export async function GET(req: NextRequest) {
         createdAt: c.created_at,
       })),
     },
-  })
+  }, { headers: CORS_HEADERS })
 }
