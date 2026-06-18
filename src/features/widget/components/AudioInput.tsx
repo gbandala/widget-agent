@@ -54,7 +54,7 @@ export function AudioInput({ onTranscription, disabled }: AudioInputProps) {
         )}
       </button>
       {errorMessage && (
-        <div className="absolute bottom-12 right-0 w-56 bg-orange-50 border border-orange-200 text-orange-700 text-xs rounded-lg px-3 py-2 shadow-sm z-10">
+        <div className="absolute bottom-12 right-0 w-60 max-w-[80vw] bg-orange-50 border border-orange-200 text-orange-700 text-xs rounded-lg px-3 py-2 shadow-sm z-10 whitespace-normal">
           {errorMessage}
         </div>
       )}
