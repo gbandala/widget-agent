@@ -29,23 +29,22 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY
+    const apiKey = process.env.GROQ_API_KEY
     if (!apiKey) {
       return NextResponse.json({ error: 'Configuración incompleta' }, { status: 500 })
     }
 
-    // Enviar a Whisper vía OpenAI-compatible API de OpenRouter
+    // Enviar a Groq Whisper (soporta multipart/form-data, rápido, OpenAI-compatible)
     const whisperFormData = new FormData()
     whisperFormData.append('file', file)
-    whisperFormData.append('model', process.env.WHISPER_MODEL ?? 'openai/whisper-1')
+    whisperFormData.append('model', process.env.WHISPER_MODEL ?? 'whisper-large-v3')
     whisperFormData.append('language', 'es')
     whisperFormData.append('response_format', 'json')
 
-    const response = await fetch('https://openrouter.ai/api/v1/audio/transcriptions', {
+    const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
       },
       body: whisperFormData,
     })
