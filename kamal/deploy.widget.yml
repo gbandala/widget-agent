@@ -7,10 +7,11 @@
 service: widget-agent
 image: gbandala/widget-agent
 
+# Host vía ERB desde env (repo público — la IP del tailnet no se commitea)
 servers:
   web:
     hosts:
-      - 100.82.132.9
+      - <%= ENV["VPS_HOST"] %>
     proxy: false
     options:
       network: dokploy-network

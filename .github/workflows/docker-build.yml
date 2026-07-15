@@ -83,35 +83,64 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ── 3. Deploy to VPS (Kamal — F3 migración 2026-07-15; antes: bash stop/rm/run) ──
+  # Pasos inline (no el reusable de clarifica-os): este repo es PÚBLICO y GitHub
+  # no permite consumir reusable workflows de un repo privado desde uno público.
   deploy:
     name: Deploy to VPS (Kamal)
     needs: build-and-push
     if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    uses: gbandala/clarifica-os/.github/workflows/deploy-kamal.yml@main
-    secrets: inherit
-    with:
-      run: |
-        set -euo pipefail
-        CMD="${{ inputs.command || 'deploy' }}"
-        VER="${{ inputs.version }}"
-        if [ "$CMD" = "deploy" ]; then
-          # -P: la imagen ya la construyó y pusheó el job build-and-push
-          kamal deploy -c kamal/deploy.widget.yml --version "${VER:-${{ github.sha }}}" -P
-        else
-          test -n "$VER" || { echo "rollback requiere version"; exit 1; }
-          kamal rollback "$VER" -c kamal/deploy.widget.yml
-        fi
-        echo "== validación =="
-        ssh gabriel@100.82.132.9 '
-          docker ps --filter label=service=widget-agent --format "{{.Names}} ({{.Status}})"
-          CID=$(docker ps -q --filter label=service=widget-agent | head -1)
-          docker exec $CID sh -c "wget -qO- -T 10 http://localhost:3000/ >/dev/null" && echo "HTTP interno OK"
-          curl -s -o /dev/null -w "público -> %{http_code}\n" https://widget.clariifica.com
-          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST https://widget.clariifica.com/api/widget/session -H "Content-Type: application/json" -d "{}")
-          echo "API session sin token -> $code (401 esperado = runtime OK)"
-          test "$code" = "401"
-        '
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Install Kamal
+        run: gem install kamal -v '~> 2.7'
+
+      - name: SSH key + known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Sin -H: net-ssh falla con known_hosts hasheado
+          ssh-keyscan -t ed25519,ecdsa,rsa ${{ secrets.VPS_HOST }} > ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Kamal deploy / rollback + validación
+        env:
+          KAMAL_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          set -euo pipefail
+          CMD="${{ inputs.command || 'deploy' }}"
+          VER="${{ inputs.version }}"
+          if [ "$CMD" = "deploy" ]; then
+            # -P: la imagen ya la construyó y pusheó el job build-and-push
+            kamal deploy -c kamal/deploy.widget.yml --version "${VER:-${{ github.sha }}}" -P
+          else
+            test -n "$VER" || { echo "rollback requiere version"; exit 1; }
+            kamal rollback "$VER" -c kamal/deploy.widget.yml
+          fi
+          echo "== validación =="
+          ssh gabriel@"$VPS_HOST" '
+            docker ps --filter label=service=widget-agent --format "{{.Names}} ({{.Status}})"
+            CID=$(docker ps -q --filter label=service=widget-agent | head -1)
+            docker exec $CID sh -c "wget -qO- -T 10 http://localhost:3000/ >/dev/null" && echo "HTTP interno OK"
+            curl -s -o /dev/null -w "público -> %{http_code}\n" https://widget.clariifica.com
+            code=$(curl -s -o /dev/null -w "%{http_code}" -X POST https://widget.clariifica.com/api/widget/session -H "Content-Type: application/json" -d "{}")
+            echo "API session sin token -> $code (401 esperado = runtime OK)"
+            test "$code" = "401"
+          '
 
