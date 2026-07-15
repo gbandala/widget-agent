@@ -1,0 +1,45 @@
+# widget.clariifica.com — Serena (producción). F3 del plan de migración (clarifica-os).
+# La imagen la construye el job build-and-push existente (buildx + build-args NEXT_PUBLIC_*);
+# kamal deploy corre con -P (skip build/push) y solo hace el rolling deploy.
+# Env runtime: /etc/widget-agent.env en el VPS (paridad con el deploy anterior —
+# la migración de env a GH Secrets queda como paso posterior, ver bitácora).
+
+service: widget-agent
+image: gbandala/widget-agent
+
+servers:
+  web:
+    hosts:
+      - 100.82.132.9
+    proxy: false
+    options:
+      network: dokploy-network
+      env-file: /etc/widget-agent.env
+
+env:
+  clear:
+    NODE_ENV: production
+    PORT: "3000"
+
+labels:
+  traefik.enable: true
+  traefik.http.routers.widget-agent.rule: Host(`widget.clariifica.com`)
+  traefik.http.routers.widget-agent.entrypoints: websecure
+  traefik.http.routers.widget-agent.tls.certresolver: letsencrypt
+  traefik.http.services.widget-agent.loadbalancer.server.port: 3000
+
+registry:
+  server: ghcr.io
+  username: gbandala
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+builder:
+  arch: amd64
+  context: .
+  dockerfile: Dockerfile
+
+ssh:
+  user: gabriel
+  keys:
+    - ~/.ssh/id_ed25519

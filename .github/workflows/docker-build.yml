@@ -3,6 +3,17 @@ name: Build & Deploy
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'deploy o rollback'
+        type: choice
+        options: [deploy, rollback]
+        default: deploy
+      version:
+        description: 'Versión (sha) — obligatoria en rollback'
+        type: string
+        default: ''
 
 env:
   IMAGE: ghcr.io/${{ github.repository }}
@@ -11,6 +22,7 @@ jobs:
   # ── 1. Pre-deploy: unit tests + lint ─────────────────────────────────────
   pre-deploy:
     name: Pre-deploy (unit tests + lint)
+    if: ${{ inputs.command != 'rollback' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,42 +82,36 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── 3. Deploy to VPS ──────────────────────────────────────────────────────
+  # ── 3. Deploy to VPS (Kamal — F3 migración 2026-07-15; antes: bash stop/rm/run) ──
   deploy:
-    name: Deploy to VPS
+    name: Deploy to VPS (Kamal)
     needs: build-and-push
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v3
-        with:
-          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
-          tags: tag:ci
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            docker pull ghcr.io/${{ github.repository }}:latest
-            docker stop widget-agent 2>/dev/null || true
-            docker rm   widget-agent 2>/dev/null || true
-            docker run -d \
-              --name widget-agent \
-              --restart unless-stopped \
-              --network dokploy-network \
-              -e NODE_ENV=production \
-              -e PORT=3000 \
-              --label "traefik.enable=true" \
-              --label "traefik.http.routers.widget-agent.rule=Host(\`widget.clariifica.com\`)" \
-              --label "traefik.http.routers.widget-agent.entrypoints=websecure" \
-              --label "traefik.http.routers.widget-agent.tls.certresolver=letsencrypt" \
-              --label "traefik.http.services.widget-agent.loadbalancer.server.port=3000" \
-              --env-file /etc/widget-agent.env \
-              ghcr.io/${{ github.repository }}:latest
-            echo "Container started"
+    if: ${{ !failure() && !cancelled() }}
+    permissions:
+      contents: read
+      packages: write
+    uses: gbandala/clarifica-os/.github/workflows/deploy-kamal.yml@main
+    secrets: inherit
+    with:
+      run: |
+        set -euo pipefail
+        CMD="${{ inputs.command || 'deploy' }}"
+        VER="${{ inputs.version }}"
+        if [ "$CMD" = "deploy" ]; then
+          # -P: la imagen ya la construyó y pusheó el job build-and-push
+          kamal deploy -c kamal/deploy.widget.yml --version "${VER:-${{ github.sha }}}" -P
+        else
+          test -n "$VER" || { echo "rollback requiere version"; exit 1; }
+          kamal rollback "$VER" -c kamal/deploy.widget.yml
+        fi
+        echo "== validación =="
+        ssh gabriel@100.82.132.9 '
+          docker ps --filter label=service=widget-agent --format "{{.Names}} ({{.Status}})"
+          CID=$(docker ps -q --filter label=service=widget-agent | head -1)
+          docker exec $CID sh -c "wget -qO- -T 10 http://localhost:3000/ >/dev/null" && echo "HTTP interno OK"
+          curl -s -o /dev/null -w "público -> %{http_code}\n" https://widget.clariifica.com
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST https://widget.clariifica.com/api/widget/session -H "Content-Type: application/json" -d "{}")
+          echo "API session sin token -> $code (401 esperado = runtime OK)"
+          test "$code" = "401"
+        '
 
