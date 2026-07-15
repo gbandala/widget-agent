@@ -76,6 +76,9 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ github.sha }}
+          # Kamal (deploy -P) exige el label service en la imagen
+          labels: |
+            service=widget-agent
           build-args: |
             NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
             NEXT_PUBLIC_DEMO_WIDGET_TOKEN=${{ secrets.NEXT_PUBLIC_DEMO_WIDGET_TOKEN }}
