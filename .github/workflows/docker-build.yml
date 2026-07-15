@@ -116,7 +116,8 @@ jobs:
       - name: SSH key + known_hosts
         run: |
           mkdir -p ~/.ssh
-          printf '%s' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          # \n final obligatorio: ssh CLI rechaza llaves sin newline (libcrypto)
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           # Sin -H: net-ssh falla con known_hosts hasheado
           ssh-keyscan -t ed25519,ecdsa,rsa ${{ secrets.VPS_HOST }} > ~/.ssh/known_hosts 2>/dev/null
