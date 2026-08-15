@@ -21,6 +21,12 @@ env:
   clear:
     NODE_ENV: production
     PORT: "3000"
+    # Docker fija HOSTNAME al hostname del contenedor, que /etc/hosts resuelve
+    # a una IP distinta por cada red conectada (dokploy-network + kamal). El
+    # server.js standalone de Next hace bind solo a la primera que resuelve
+    # (la red kamal), dejando el puerto sordo para Traefik (dokploy-network) ->
+    # 502 permanente. 0.0.0.0 fuerza bind en todas las interfaces.
+    HOSTNAME: "0.0.0.0"
 
 labels:
   traefik.enable: true
